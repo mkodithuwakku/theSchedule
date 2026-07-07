@@ -1,0 +1,319 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  employee
+  manager
+}
+
+enum ScheduleStatus {
+  draft
+  published
+  archived
+}
+
+enum UnavailableType {
+  full_day
+  shift_template
+  custom_time_range
+}
+
+enum CoverageStatus {
+  open
+  offered
+  approved
+  rejected
+  cancelled
+}
+
+enum SwapStatus {
+  pending_employee_response
+  declined_by_employee
+  pending_manager_approval
+  approved
+  rejected_by_manager
+  cancelled
+}
+
+enum SnapshotType {
+  initial_published
+  final_period_close
+}
+
+model User {
+  id                  String                   @id @default(cuid())
+  name                String?
+  email               String?                  @unique
+  emailVerified       DateTime?
+  image               String?
+  role                UserRole                 @default(employee)
+  active              Boolean                  @default(true)
+  accounts            Account[]
+  sessions            Session[]
+  memberships         StoreMembership[]
+  createdPeriods      SchedulePeriod[]         @relation("CreatedPeriods")
+  availability        AvailabilitySubmission[]
+  shifts              Shift[]
+  requestedCoverage   CoverageRequest[]        @relation("CoverageRequester")
+  claimedCoverage     CoverageRequest[]        @relation("CoverageClaimer")
+  approvedCoverage    CoverageRequest[]        @relation("CoverageApprover")
+  requestedSwaps      SwapRequest[]            @relation("SwapRequester")
+  requestedSwapTarget SwapRequest[]            @relation("SwapTarget")
+  approvedSwaps       SwapRequest[]            @relation("SwapApprover")
+  notifications       NotificationLog[]
+  auditLogs           AuditLog[]
+  shiftSnapshots      ShiftSnapshot[]
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Store {
+  id                  String             @id @default(cuid())
+  name                String
+  timezone            String             @default("America/Edmonton")
+  releaseDays         Int[]              @default([14, 31])
+  availabilityOpenDays Int               @default(5)
+  availabilityDeadlineDays Int           @default(2)
+  memberships         StoreMembership[]
+  periods             SchedulePeriod[]
+  shifts              Shift[]
+  templates           ShiftTemplate[]
+  storeHours          StoreHours[]
+  notifications       NotificationLog[]
+  auditLogs           AuditLog[]
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+}
+
+model StoreMembership {
+  id        String   @id @default(cuid())
+  storeId   String
+  userId    String
+  role      UserRole
+  active    Boolean  @default(true)
+  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([storeId, userId])
+}
+
+model SchedulePeriod {
+  id                     String                   @id @default(cuid())
+  storeId                String
+  name                   String
+  startDate              DateTime
+  endDate                DateTime
+  releaseDate            DateTime
+  availabilityOpenAt     DateTime
+  availabilityDeadlineAt DateTime
+  status                 ScheduleStatus           @default(draft)
+  publishedAt            DateTime?
+  createdById            String
+  store                  Store                    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  createdBy              User                     @relation("CreatedPeriods", fields: [createdById], references: [id])
+  availability           AvailabilitySubmission[]
+  shifts                 Shift[]
+  snapshots              ShiftSnapshot[]
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime                 @updatedAt
+}
+
+model AvailabilitySubmission {
+  id               String           @id @default(cuid())
+  schedulePeriodId String
+  userId           String
+  submittedAt      DateTime?
+  note             String?
+  schedulePeriod   SchedulePeriod   @relation(fields: [schedulePeriodId], references: [id], onDelete: Cascade)
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  unavailableDays  UnavailableDay[]
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@unique([schedulePeriodId, userId])
+}
+
+model UnavailableDay {
+  id                       String                 @id @default(cuid())
+  availabilitySubmissionId String
+  date                     DateTime
+  unavailableType          UnavailableType
+  allDay                   Boolean                @default(false)
+  shiftTemplateId          String?
+  startTime                String?
+  endTime                  String?
+  note                     String?
+  availabilitySubmission   AvailabilitySubmission @relation(fields: [availabilitySubmissionId], references: [id], onDelete: Cascade)
+  shiftTemplate            ShiftTemplate?         @relation(fields: [shiftTemplateId], references: [id])
+}
+
+model Shift {
+  id               String             @id @default(cuid())
+  schedulePeriodId String
+  storeId          String
+  date             DateTime
+  startTime        String
+  endTime          String
+  employeeId       String?
+  roleLabel        String?
+  notes            String?
+  schedulePeriod   SchedulePeriod     @relation(fields: [schedulePeriodId], references: [id], onDelete: Cascade)
+  store            Store              @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  employee         User?              @relation(fields: [employeeId], references: [id])
+  coverageRequests CoverageRequest[]
+  swapAsRequester  SwapRequest[]      @relation("RequesterShift")
+  swapAsTarget     SwapRequest[]      @relation("TargetShift")
+  snapshots        ShiftSnapshot[]
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+}
+
+model ShiftTemplate {
+  id              String           @id @default(cuid())
+  storeId          String
+  dayPattern       String
+  dayOfWeek        Int?
+  name            String
+  startTime        String
+  endTime          String
+  roleLabel        String?
+  active          Boolean          @default(true)
+  store           Store            @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  unavailableDays UnavailableDay[]
+}
+
+model StoreHours {
+  id        String  @id @default(cuid())
+  storeId   String
+  dayOfWeek Int
+  openTime  String
+  closeTime String
+  label     String?
+  active    Boolean @default(true)
+  store     Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, dayOfWeek])
+}
+
+model ShiftSnapshot {
+  id               String         @id @default(cuid())
+  shiftId          String
+  schedulePeriodId String
+  employeeId       String?
+  date             DateTime
+  startTime        String
+  endTime          String
+  snapshotType     SnapshotType
+  createdAt        DateTime       @default(now())
+  shift            Shift          @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  schedulePeriod   SchedulePeriod @relation(fields: [schedulePeriodId], references: [id], onDelete: Cascade)
+  employee         User?          @relation(fields: [employeeId], references: [id])
+}
+
+model CoverageRequest {
+  id            String         @id @default(cuid())
+  shiftId       String
+  requestedById String
+  claimedById   String?
+  status        CoverageStatus @default(open)
+  reason        String?
+  managerNote   String?
+  approvedById  String?
+  approvedAt    DateTime?
+  shift         Shift          @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  requestedBy   User           @relation("CoverageRequester", fields: [requestedById], references: [id])
+  claimedBy     User?          @relation("CoverageClaimer", fields: [claimedById], references: [id])
+  approvedBy    User?          @relation("CoverageApprover", fields: [approvedById], references: [id])
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+}
+
+model SwapRequest {
+  id                 String     @id @default(cuid())
+  requesterId        String
+  targetEmployeeId   String?
+  requesterShiftId   String
+  targetShiftId      String?
+  status             SwapStatus @default(pending_employee_response)
+  reason             String?
+  managerNote        String?
+  approvedById       String?
+  approvedAt         DateTime?
+  requester          User       @relation("SwapRequester", fields: [requesterId], references: [id])
+  targetEmployee     User?      @relation("SwapTarget", fields: [targetEmployeeId], references: [id])
+  requesterShift     Shift      @relation("RequesterShift", fields: [requesterShiftId], references: [id], onDelete: Cascade)
+  targetShift        Shift?     @relation("TargetShift", fields: [targetShiftId], references: [id], onDelete: Cascade)
+  approvedBy         User?      @relation("SwapApprover", fields: [approvedById], references: [id])
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+}
+
+model NotificationLog {
+  id           String    @id @default(cuid())
+  storeId      String
+  userId       String?
+  type         String
+  subject      String
+  status       String
+  sentAt       DateTime?
+  metadataJson Json?
+  store        Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  user         User?     @relation(fields: [userId], references: [id])
+  createdAt    DateTime  @default(now())
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  storeId     String
+  actorUserId String?
+  action      String
+  entityType  String
+  entityId    String?
+  beforeJson  Json?
+  afterJson   Json?
+  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  actor       User?    @relation(fields: [actorUserId], references: [id])
+  createdAt   DateTime @default(now())
+}
