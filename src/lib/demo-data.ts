@@ -16,7 +16,6 @@ export type Employee = {
   email: string;
   role: Role;
   active: boolean;
-  position: string;
 };
 
 export type StoreHours = {
@@ -34,7 +33,6 @@ export type ShiftTemplate = {
   name: string;
   startTime: string;
   endTime: string;
-  roleLabel: string;
   active: boolean;
 };
 
@@ -78,7 +76,6 @@ export type Shift = {
   startTime: string;
   endTime: string;
   employeeId?: string;
-  roleLabel: string;
   notes?: string;
   originalEmployeeId?: string;
   originalStartTime?: string;
@@ -127,7 +124,7 @@ export type NotificationEntry = {
 
 export const store = {
   id: "store_wem",
-  name: "West Edmonton Mall Store",
+  name: "Men Are From Mars",
   timezone: "America/Edmonton",
   availabilityOpenDays: 5,
   availabilityDeadlineDays: 2,
@@ -137,59 +134,31 @@ export const store = {
 export const employees: Employee[] = [
   {
     id: "emp_manager",
-    name: "Mika Patel",
-    email: "manager@example.com",
+    name: "M. Kodithuwakku",
+    email: "m.kodithuwakku803@gmail.com",
     role: "manager",
-    active: true,
-    position: "Store Manager"
+    active: true
   },
   {
-    id: "emp_avery",
-    name: "Avery Chen",
-    email: "avery@example.com",
+    id: "emp_ualberta",
+    name: "Kodithuw UAlberta",
+    email: "kodithuw@ualberta.ca",
     role: "employee",
-    active: true,
-    position: "Sales"
+    active: true
   },
   {
-    id: "emp_jordan",
-    name: "Jordan Lee",
-    email: "jordan@example.com",
+    id: "emp_hockey",
+    name: "M. Kodithuwakku Hockey",
+    email: "m.kodithuwakku.hockey@gmail.com",
     role: "employee",
-    active: true,
-    position: "Keyholder"
+    active: true
   },
   {
-    id: "emp_sofia",
-    name: "Sofia Brown",
-    email: "sofia@example.com",
+    id: "emp_bobby",
+    name: "Bobby Cazby",
+    email: "bobby.cazby@gmail.com",
     role: "employee",
-    active: true,
-    position: "Sales"
-  },
-  {
-    id: "emp_noah",
-    name: "Noah Wilson",
-    email: "noah@example.com",
-    role: "employee",
-    active: true,
-    position: "Closer"
-  },
-  {
-    id: "emp_priya",
-    name: "Priya Singh",
-    email: "priya@example.com",
-    role: "employee",
-    active: true,
-    position: "Sales"
-  },
-  {
-    id: "emp_inactive",
-    name: "Taylor Grey",
-    email: "taylor@example.com",
-    role: "employee",
-    active: false,
-    position: "Former employee"
+    active: true
   }
 ];
 
@@ -204,13 +173,13 @@ export const storeHours: StoreHours[] = [
 ];
 
 export const shiftTemplates: ShiftTemplate[] = [
-  { id: "tpl_weekday_open", dayPattern: "weekday", name: "Open", startTime: "09:45", endTime: "15:45", roleLabel: "Sales", active: true },
-  { id: "tpl_weekday_close", dayPattern: "weekday", name: "Close", startTime: "15:15", endTime: "21:15", roleLabel: "Closer", active: true },
-  { id: "tpl_weekend_open", dayPattern: "weekend", name: "Open", startTime: "09:45", endTime: "15:45", roleLabel: "Sales", active: true },
-  { id: "tpl_weekend_mid", dayPattern: "weekend", name: "Mid", startTime: "12:00", endTime: "18:00", roleLabel: "Sales", active: true },
-  { id: "tpl_weekend_close", dayPattern: "weekend", name: "Close", startTime: "15:15", endTime: "21:15", roleLabel: "Closer", active: true },
-  { id: "tpl_sunday_open", dayPattern: "sunday", name: "Sunday Open", startTime: "10:45", endTime: "14:45", roleLabel: "Sales", active: true },
-  { id: "tpl_sunday_close", dayPattern: "sunday", name: "Sunday Close", startTime: "14:15", endTime: "18:15", roleLabel: "Closer", active: true }
+  { id: "tpl_weekday_open", dayPattern: "weekday", name: "Open", startTime: "09:45", endTime: "15:45", active: true },
+  { id: "tpl_weekday_close", dayPattern: "weekday", name: "Close", startTime: "15:15", endTime: "21:15", active: true },
+  { id: "tpl_weekend_open", dayPattern: "weekend", name: "Open", startTime: "09:45", endTime: "15:45", active: true },
+  { id: "tpl_weekend_mid", dayPattern: "weekend", name: "Mid", startTime: "12:00", endTime: "18:00", active: true },
+  { id: "tpl_weekend_close", dayPattern: "weekend", name: "Close", startTime: "15:15", endTime: "21:15", active: true },
+  { id: "tpl_sunday_open", dayPattern: "sunday", name: "Sunday Open", startTime: "10:45", endTime: "14:45", active: true },
+  { id: "tpl_sunday_close", dayPattern: "sunday", name: "Sunday Close", startTime: "14:15", endTime: "18:15", active: true }
 ];
 
 export const schedulePeriod: SchedulePeriod = {
@@ -226,15 +195,15 @@ export const schedulePeriod: SchedulePeriod = {
 
 export const availabilitySubmissions: AvailabilitySubmission[] = [
   {
-    id: "av_avery",
+    id: "av_ualberta",
     schedulePeriodId: schedulePeriod.id,
-    userId: "emp_avery",
+    userId: "emp_ualberta",
     submittedAt: "2026-07-10T17:20:00.000Z",
     note: "Class before lunch.",
     unavailable: [
       {
-        id: "u_avery_17",
-        userId: "emp_avery",
+        id: "u_ualberta_17",
+        userId: "emp_ualberta",
         date: "2026-07-17",
         unavailableType: "custom_time_range",
         allDay: false,
@@ -245,23 +214,23 @@ export const availabilitySubmissions: AvailabilitySubmission[] = [
     ]
   },
   {
-    id: "av_jordan",
+    id: "av_hockey",
     schedulePeriodId: schedulePeriod.id,
-    userId: "emp_jordan",
+    userId: "emp_hockey",
     submittedAt: "2026-07-10T21:03:00.000Z",
     note: "Away on the weekend.",
     unavailable: [
       {
-        id: "u_jordan_18",
-        userId: "emp_jordan",
+        id: "u_hockey_18",
+        userId: "emp_hockey",
         date: "2026-07-18",
         unavailableType: "full_day",
         allDay: true,
         note: "Family event"
       },
       {
-        id: "u_jordan_19",
-        userId: "emp_jordan",
+        id: "u_hockey_19",
+        userId: "emp_hockey",
         date: "2026-07-19",
         unavailableType: "full_day",
         allDay: true,
@@ -270,15 +239,15 @@ export const availabilitySubmissions: AvailabilitySubmission[] = [
     ]
   },
   {
-    id: "av_noah",
+    id: "av_bobby",
     schedulePeriodId: schedulePeriod.id,
-    userId: "emp_noah",
+    userId: "emp_bobby",
     submittedAt: "2026-07-11T15:40:00.000Z",
     note: "Can close most nights.",
     unavailable: [
       {
-        id: "u_noah_21",
-        userId: "emp_noah",
+        id: "u_bobby_21",
+        userId: "emp_bobby",
         date: "2026-07-21",
         unavailableType: "shift_template",
         allDay: false,
@@ -292,34 +261,34 @@ export const availabilitySubmissions: AvailabilitySubmission[] = [
 ];
 
 export const initialShifts: Shift[] = [
-  { id: "shift_1", schedulePeriodId: schedulePeriod.id, date: "2026-07-15", startTime: "09:45", endTime: "15:45", employeeId: "emp_avery", roleLabel: "Sales", originalEmployeeId: "emp_avery", originalStartTime: "09:45", originalEndTime: "15:45" },
-  { id: "shift_2", schedulePeriodId: schedulePeriod.id, date: "2026-07-15", startTime: "15:15", endTime: "21:15", employeeId: "emp_noah", roleLabel: "Closer", originalEmployeeId: "emp_noah", originalStartTime: "15:15", originalEndTime: "21:15" },
-  { id: "shift_3", schedulePeriodId: schedulePeriod.id, date: "2026-07-16", startTime: "09:45", endTime: "15:45", employeeId: "emp_sofia", roleLabel: "Sales", originalEmployeeId: "emp_sofia", originalStartTime: "09:45", originalEndTime: "15:45" },
-  { id: "shift_4", schedulePeriodId: schedulePeriod.id, date: "2026-07-16", startTime: "15:15", endTime: "21:15", employeeId: "emp_jordan", roleLabel: "Keyholder", originalEmployeeId: "emp_jordan", originalStartTime: "15:15", originalEndTime: "21:15" },
-  { id: "shift_5", schedulePeriodId: schedulePeriod.id, date: "2026-07-17", startTime: "09:45", endTime: "15:45", employeeId: "emp_priya", roleLabel: "Sales", originalEmployeeId: "emp_priya", originalStartTime: "09:45", originalEndTime: "15:45" },
-  { id: "shift_6", schedulePeriodId: schedulePeriod.id, date: "2026-07-17", startTime: "15:15", endTime: "21:15", employeeId: "emp_avery", roleLabel: "Closer", originalEmployeeId: "emp_avery", originalStartTime: "15:15", originalEndTime: "21:15" },
-  { id: "shift_7", schedulePeriodId: schedulePeriod.id, date: "2026-07-18", startTime: "09:45", endTime: "15:45", employeeId: "emp_sofia", roleLabel: "Sales", originalEmployeeId: "emp_sofia", originalStartTime: "09:45", originalEndTime: "15:45" },
-  { id: "shift_8", schedulePeriodId: schedulePeriod.id, date: "2026-07-18", startTime: "12:00", endTime: "18:00", employeeId: "emp_priya", roleLabel: "Sales", originalEmployeeId: "emp_priya", originalStartTime: "12:00", originalEndTime: "18:00" },
-  { id: "shift_9", schedulePeriodId: schedulePeriod.id, date: "2026-07-18", startTime: "15:15", endTime: "21:15", employeeId: "emp_noah", roleLabel: "Closer", originalEmployeeId: "emp_noah", originalStartTime: "15:15", originalEndTime: "21:15" },
-  { id: "shift_10", schedulePeriodId: schedulePeriod.id, date: "2026-07-19", startTime: "10:45", endTime: "14:45", employeeId: "emp_avery", roleLabel: "Sales", originalEmployeeId: "emp_avery", originalStartTime: "10:45", originalEndTime: "14:45" },
-  { id: "shift_11", schedulePeriodId: schedulePeriod.id, date: "2026-07-19", startTime: "14:15", endTime: "18:15", employeeId: "emp_sofia", roleLabel: "Closer", originalEmployeeId: "emp_sofia", originalStartTime: "14:15", originalEndTime: "18:15" }
+  { id: "shift_1", schedulePeriodId: schedulePeriod.id, date: "2026-07-15", startTime: "09:45", endTime: "15:45", employeeId: "emp_manager", originalEmployeeId: "emp_manager", originalStartTime: "09:45", originalEndTime: "15:45" },
+  { id: "shift_2", schedulePeriodId: schedulePeriod.id, date: "2026-07-15", startTime: "15:15", endTime: "21:15", employeeId: "emp_bobby", originalEmployeeId: "emp_bobby", originalStartTime: "15:15", originalEndTime: "21:15" },
+  { id: "shift_3", schedulePeriodId: schedulePeriod.id, date: "2026-07-16", startTime: "09:45", endTime: "15:45", employeeId: "emp_ualberta", originalEmployeeId: "emp_ualberta", originalStartTime: "09:45", originalEndTime: "15:45" },
+  { id: "shift_4", schedulePeriodId: schedulePeriod.id, date: "2026-07-16", startTime: "15:15", endTime: "21:15", employeeId: "emp_hockey", originalEmployeeId: "emp_hockey", originalStartTime: "15:15", originalEndTime: "21:15" },
+  { id: "shift_5", schedulePeriodId: schedulePeriod.id, date: "2026-07-17", startTime: "09:45", endTime: "15:45", employeeId: "emp_bobby", originalEmployeeId: "emp_bobby", originalStartTime: "09:45", originalEndTime: "15:45" },
+  { id: "shift_6", schedulePeriodId: schedulePeriod.id, date: "2026-07-17", startTime: "15:15", endTime: "21:15", employeeId: "emp_manager", originalEmployeeId: "emp_manager", originalStartTime: "15:15", originalEndTime: "21:15" },
+  { id: "shift_7", schedulePeriodId: schedulePeriod.id, date: "2026-07-18", startTime: "09:45", endTime: "15:45", employeeId: "emp_ualberta", originalEmployeeId: "emp_ualberta", originalStartTime: "09:45", originalEndTime: "15:45" },
+  { id: "shift_8", schedulePeriodId: schedulePeriod.id, date: "2026-07-18", startTime: "12:00", endTime: "18:00", employeeId: "emp_hockey", originalEmployeeId: "emp_hockey", originalStartTime: "12:00", originalEndTime: "18:00" },
+  { id: "shift_9", schedulePeriodId: schedulePeriod.id, date: "2026-07-18", startTime: "15:15", endTime: "21:15", employeeId: "emp_bobby", originalEmployeeId: "emp_bobby", originalStartTime: "15:15", originalEndTime: "21:15" },
+  { id: "shift_10", schedulePeriodId: schedulePeriod.id, date: "2026-07-19", startTime: "10:45", endTime: "14:45", employeeId: "emp_manager", originalEmployeeId: "emp_manager", originalStartTime: "10:45", originalEndTime: "14:45" },
+  { id: "shift_11", schedulePeriodId: schedulePeriod.id, date: "2026-07-19", startTime: "14:15", endTime: "18:15", employeeId: "emp_ualberta", originalEmployeeId: "emp_ualberta", originalStartTime: "14:15", originalEndTime: "18:15" }
 ];
 
 export const coverageRequests: CoverageRequest[] = [
   {
     id: "cov_1",
     shiftId: "shift_6",
-    requestedById: "emp_avery",
+    requestedById: "emp_manager",
     status: "open",
-    reason: "Need coverage for a school event."
+    reason: "Need coverage while handling a manager task."
   }
 ];
 
 export const swapRequests: SwapRequest[] = [
   {
     id: "swap_1",
-    requesterId: "emp_sofia",
-    targetEmployeeId: "emp_noah",
+    requesterId: "emp_ualberta",
+    targetEmployeeId: "emp_bobby",
     requesterShiftId: "shift_7",
     targetShiftId: "shift_9",
     status: "pending_employee_response",
@@ -334,7 +303,7 @@ export const initialAuditLog: AuditEntry[] = [
     action: "draft_created",
     entityType: "SchedulePeriod",
     entityId: schedulePeriod.id,
-    summary: "Generated draft period from West Edmonton Mall defaults.",
+    summary: "Generated draft period from Men Are From Mars defaults.",
     createdAt: "2026-07-06T19:10:00.000Z"
   }
 ];
@@ -342,7 +311,7 @@ export const initialAuditLog: AuditEntry[] = [
 export const initialNotifications: NotificationEntry[] = [
   {
     id: "note_1",
-    userId: "emp_avery",
+    userId: "emp_manager",
     type: "coverage_opened",
     subject: "A shift is open for coverage",
     status: "queued",
@@ -441,7 +410,6 @@ export function generateDefaultShifts(period: SchedulePeriod) {
       date,
       startTime: template.startTime,
       endTime: template.endTime,
-      roleLabel: template.roleLabel,
       employeeId: undefined,
       originalEmployeeId: undefined,
       originalStartTime: template.startTime,

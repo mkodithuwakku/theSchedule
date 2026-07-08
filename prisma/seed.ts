@@ -2,15 +2,13 @@ import { PrismaClient, ScheduleStatus, UserRole } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-const managerEmail = process.env.SEED_MANAGER_EMAIL ?? "manager@example.com";
+const managerEmail = process.env.SEED_MANAGER_EMAIL ?? "m.kodithuwakku803@gmail.com";
 
 const employees = [
-  { name: "Mika Patel", email: managerEmail, role: UserRole.manager },
-  { name: "Avery Chen", email: "avery@example.com", role: UserRole.employee },
-  { name: "Jordan Lee", email: "jordan@example.com", role: UserRole.employee },
-  { name: "Sofia Brown", email: "sofia@example.com", role: UserRole.employee },
-  { name: "Noah Wilson", email: "noah@example.com", role: UserRole.employee },
-  { name: "Priya Singh", email: "priya@example.com", role: UserRole.employee }
+  { name: "M. Kodithuwakku", email: managerEmail, role: UserRole.manager },
+  { name: "Kodithuw UAlberta", email: "kodithuw@ualberta.ca", role: UserRole.employee },
+  { name: "M. Kodithuwakku Hockey", email: "m.kodithuwakku.hockey@gmail.com", role: UserRole.employee },
+  { name: "Bobby Cazby", email: "bobby.cazby@gmail.com", role: UserRole.employee }
 ];
 
 const storeHours = [
@@ -39,7 +37,7 @@ async function main() {
     update: {},
     create: {
       id: "store_wem",
-      name: "West Edmonton Mall Store",
+      name: "Men Are From Mars",
       timezone: "America/Edmonton"
     }
   });
@@ -91,8 +89,7 @@ async function main() {
       dayPattern,
       name,
       startTime,
-      endTime,
-      roleLabel: name.includes("Close") ? "Closer" : "Sales"
+      endTime
     }))
   });
 

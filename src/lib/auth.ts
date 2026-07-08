@@ -20,18 +20,31 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async signIn({ user }) {
       if (!user.email) return false;
+      const email = user.email.trim().toLowerCase();
 
       const membership = await prisma.storeMembership.findFirst({
         where: {
           active: true,
           user: {
-            email: user.email,
+            email,
             active: true
           }
         }
       });
 
-      return Boolean(membership);
+      if (membership) return true;
+
+      const invitation = await prisma.storeInvitation.findFirst({
+        where: {
+          email,
+          acceptedAt: null,
+          expiresAt: {
+            gt: new Date()
+          }
+        }
+      });
+
+      return Boolean(invitation);
     },
     async session({ session, user }) {
       if (session.user) {

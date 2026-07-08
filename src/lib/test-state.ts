@@ -42,7 +42,10 @@ export function createDefaultTestState(): StoredTestState {
     swaps: [],
     auditLog: defaultAuditLog,
     notifications: [],
-    availabilityDrafts: {}
+    availabilityDrafts: {},
+    preferences: {},
+    uatIssues: [],
+    inviteAcceptances: []
   };
 }
 
@@ -58,7 +61,10 @@ function normalizeTestState(candidate: Partial<StoredTestState>): StoredTestStat
     swaps: Array.isArray(candidate.swaps) ? candidate.swaps : defaults.swaps,
     auditLog: Array.isArray(candidate.auditLog) ? candidate.auditLog : defaults.auditLog,
     notifications: Array.isArray(candidate.notifications) ? candidate.notifications : defaults.notifications,
-    availabilityDrafts: candidate.availabilityDrafts ?? defaults.availabilityDrafts
+    availabilityDrafts: candidate.availabilityDrafts ?? defaults.availabilityDrafts,
+    preferences: candidate.preferences ?? defaults.preferences,
+    uatIssues: Array.isArray(candidate.uatIssues) ? candidate.uatIssues : defaults.uatIssues,
+    inviteAcceptances: Array.isArray(candidate.inviteAcceptances) ? candidate.inviteAcceptances : defaults.inviteAcceptances
   };
 }
 

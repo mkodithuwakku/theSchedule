@@ -69,6 +69,8 @@ model User {
   notifications       NotificationLog[]
   auditLogs           AuditLog[]
   shiftSnapshots      ShiftSnapshot[]
+  invitationsSent     StoreInvitation[]         @relation("InvitationsSent")
+  invitationsAccepted StoreInvitation[]         @relation("InvitationsAccepted")
   createdAt           DateTime                 @default(now())
   updatedAt           DateTime                 @updatedAt
 }
@@ -119,6 +121,7 @@ model Store {
   shifts              Shift[]
   templates           ShiftTemplate[]
   storeHours          StoreHours[]
+  invitations         StoreInvitation[]
   notifications       NotificationLog[]
   auditLogs           AuditLog[]
   createdAt           DateTime           @default(now())
@@ -137,6 +140,25 @@ model StoreMembership {
   updatedAt DateTime @updatedAt
 
   @@unique([storeId, userId])
+}
+
+model StoreInvitation {
+  id           String    @id @default(cuid())
+  storeId      String
+  email        String
+  role         UserRole  @default(employee)
+  token        String    @unique
+  invitedById  String?
+  acceptedById String?
+  acceptedAt   DateTime?
+  expiresAt    DateTime
+  createdAt    DateTime  @default(now())
+  store        Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  invitedBy    User?     @relation("InvitationsSent", fields: [invitedById], references: [id])
+  acceptedBy   User?     @relation("InvitationsAccepted", fields: [acceptedById], references: [id])
+
+  @@index([email])
+  @@index([storeId, email])
 }
 
 model SchedulePeriod {

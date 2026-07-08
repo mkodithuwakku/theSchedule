@@ -5,16 +5,16 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        ink: "#14110f",
-        paper: "#f7f5f0",
-        line: "#d8d2c5",
-        mall: "#256f6d",
-        shift: "#8b4e25",
-        approve: "#1f7a4d",
-        warn: "#b54708"
+        ink: "rgb(var(--color-ink) / <alpha-value>)",
+        paper: "rgb(var(--color-paper) / <alpha-value>)",
+        line: "rgb(var(--color-line) / <alpha-value>)",
+        mall: "rgb(var(--color-mall) / <alpha-value>)",
+        shift: "rgb(var(--color-shift) / <alpha-value>)",
+        approve: "rgb(var(--color-approve) / <alpha-value>)",
+        warn: "rgb(var(--color-warn) / <alpha-value>)"
       },
       boxShadow: {
-        panel: "0 1px 0 rgba(20, 17, 15, 0.08), 0 12px 32px rgba(20, 17, 15, 0.08)"
+        panel: "var(--shadow-panel)"
       }
     }
   },
