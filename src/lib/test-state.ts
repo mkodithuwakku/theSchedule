@@ -4,6 +4,7 @@ import {
   type AuditEntry,
   type NotificationEntry,
   employees,
+  generateDefaultShifts,
   initialAuditLog,
   schedulePeriod
 } from "@/lib/demo-data";
@@ -36,7 +37,7 @@ export function createDefaultTestState(): StoredTestState {
   return {
     people: clone(employees),
     period: clone(schedulePeriod),
-    shifts: [],
+    shifts: clone(generateDefaultShifts(schedulePeriod)),
     availability: [],
     coverage: [],
     swaps: [],

@@ -22,9 +22,8 @@ import {
   Users,
   X
 } from "lucide-react";
-import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   type AuditEntry,
   type AvailabilitySubmission,
@@ -54,6 +53,8 @@ import {
   swapRequests,
   store,
   storeHours,
+  templatePatternForDate,
+  toMinutes,
   type NotificationEntry
 } from "@/lib/demo-data";
 import {
@@ -81,11 +82,10 @@ type TabId =
   | "team"
   | "submit";
 
-type CustomShiftForm = {
-  date: string;
-  startTime: string;
-  endTime: string;
-  notes: string;
+type EmployeeForm = {
+  firstName: string;
+  lastName: string;
+  email: string;
 };
 
 type PersistenceStatus = "loading" | "saving" | "saved" | "local" | "error";
@@ -105,7 +105,7 @@ const issueCategories: Array<{ id: UatIssueCategory; label: string }> = [
 const buttonBase =
   "inline-flex h-9 items-center justify-center gap-2 rounded-md border px-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50";
 const inputBase =
-  "h-9 w-full rounded-md border border-line bg-white px-3 text-sm text-ink shadow-sm";
+  "h-9 w-full rounded-md border border-line bg-white px-3 text-sm text-ink shadow-sm placeholder:text-ink/35";
 const DEFAULT_AUDIT_LOG: AuditEntry[] = [
   {
     ...initialAuditLog[0],
@@ -131,6 +131,28 @@ function shortDayLabel(date: string) {
 
 function weekdayLong(date: string) {
   return new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(parseLocalDate(date));
+}
+
+function employeeNameParts(name: string): Pick<EmployeeForm, "firstName" | "lastName"> {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) return { firstName: parts[0] ?? "", lastName: "" };
+  return {
+    firstName: parts.slice(0, -1).join(" "),
+    lastName: parts.at(-1) ?? ""
+  };
+}
+
+function employeeFullName(form: EmployeeForm) {
+  return `${form.firstName.trim()} ${form.lastName.trim()}`.trim();
+}
+
+function isValidTimeRange(startTime?: string, endTime?: string) {
+  if (!startTime || !endTime) return false;
+  return toMinutes(endTime) > toMinutes(startTime);
+}
+
+function sortUnavailableEntries(entries: Unavailability[]) {
+  return [...entries].sort((a, b) => `${a.date}${a.startTime ?? ""}`.localeCompare(`${b.date}${b.startTime ?? ""}`));
 }
 
 function buildCalendarWeeks(
@@ -171,39 +193,147 @@ function buildCalendarWeeks(
   return weeks;
 }
 
-function availabilityConflictDetails(
-  employeeId: string,
-  shift: Pick<Shift, "date" | "startTime" | "endTime">,
-  submissions: AvailabilitySubmission[]
-) {
-  const submission = submissions.find((item) => item.userId === employeeId);
-  if (!submission) return [];
-
-  return submission.unavailable
-    .filter((entry) => entry.date === shift.date)
-    .filter((entry) => {
-      if (entry.allDay || entry.unavailableType === "full_day") return true;
-      if (!entry.startTime || !entry.endTime) return false;
-      return isEmployeeUnavailable(employeeId, shift, submissions);
-    })
-    .map((entry) => {
-      if (entry.allDay || entry.unavailableType === "full_day") return "Full day unavailable";
-      return `Unavailable ${formatTime(entry.startTime ?? "00:00")}-${formatTime(entry.endTime ?? "00:00")}`;
-    });
+function sanitizeFilename(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "schedule";
 }
 
-function availabilityStatusForShift(
-  employee: Employee,
-  shift: Pick<Shift, "date" | "startTime" | "endTime">,
-  submissions: AvailabilitySubmission[]
-) {
-  if (!employee.active) return { unavailable: true, reason: "Inactive employee" };
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
 
-  const details = availabilityConflictDetails(employee.id, shift, submissions);
-  return {
-    unavailable: details.length > 0,
-    reason: details[0] ?? "Available"
-  };
+function copyComputedStyles(source: Element, target: Element) {
+  const styles = window.getComputedStyle(source);
+  const styleText = Array.from(styles)
+    .map((property) => `${property}:${styles.getPropertyValue(property)};`)
+    .join("");
+  (target as HTMLElement).setAttribute("style", styleText);
+
+  Array.from(source.children).forEach((child, index) => {
+    const targetChild = target.children[index];
+    if (targetChild) copyComputedStyles(child, targetChild);
+  });
+}
+
+function bytesFromString(value: string) {
+  return Uint8Array.from(value, (char) => char.charCodeAt(0));
+}
+
+function bytesFromDataUrl(dataUrl: string) {
+  const base64 = dataUrl.split(",")[1] ?? "";
+  const binary = window.atob(base64);
+  return Uint8Array.from(binary, (char) => char.charCodeAt(0));
+}
+
+function concatBytes(chunks: Uint8Array[]) {
+  const length = chunks.reduce((total, chunk) => total + chunk.length, 0);
+  const output = new Uint8Array(length);
+  let offset = 0;
+  chunks.forEach((chunk) => {
+    output.set(chunk, offset);
+    offset += chunk.length;
+  });
+  return output;
+}
+
+function buildPdfFromJpeg(jpegBytes: Uint8Array, widthPx: number, heightPx: number) {
+  const widthPt = Math.max(1, Math.round(widthPx * 0.75));
+  const heightPt = Math.max(1, Math.round(heightPx * 0.75));
+  const objects: Uint8Array[] = [];
+
+  const content = `q\n${widthPt} 0 0 ${heightPt} 0 0 cm\n/Im0 Do\nQ\n`;
+  objects.push(bytesFromString("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n"));
+  objects.push(bytesFromString("2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n"));
+  objects.push(bytesFromString(`3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${widthPt} ${heightPt}] /Resources << /XObject << /Im0 5 0 R >> >> /Contents 4 0 R >>\nendobj\n`));
+  objects.push(bytesFromString(`4 0 obj\n<< /Length ${content.length} >>\nstream\n${content}endstream\nendobj\n`));
+  objects.push(concatBytes([
+    bytesFromString(`5 0 obj\n<< /Type /XObject /Subtype /Image /Width ${widthPx} /Height ${heightPx} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpegBytes.length} >>\nstream\n`),
+    jpegBytes,
+    bytesFromString("\nendstream\nendobj\n")
+  ]));
+
+  const chunks: Uint8Array[] = [bytesFromString("%PDF-1.4\n")];
+  const offsets = [0];
+  objects.forEach((object) => {
+    offsets.push(chunks.reduce((total, chunk) => total + chunk.length, 0));
+    chunks.push(object);
+  });
+  const xrefOffset = chunks.reduce((total, chunk) => total + chunk.length, 0);
+  const xrefRows = offsets
+    .map((offset, index) => (index === 0 ? "0000000000 65535 f \n" : `${String(offset).padStart(10, "0")} 00000 n \n`))
+    .join("");
+  chunks.push(bytesFromString(`xref\n0 ${objects.length + 1}\n${xrefRows}trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`));
+
+  return new Blob([concatBytes(chunks)], { type: "application/pdf" });
+}
+
+async function renderElementToCanvas(element: HTMLElement) {
+  await document.fonts?.ready;
+  const rect = element.getBoundingClientRect();
+  const width = Math.ceil(Math.max(element.scrollWidth, rect.width));
+  const height = Math.ceil(Math.max(element.scrollHeight, rect.height));
+  const clone = element.cloneNode(true) as HTMLElement;
+  copyComputedStyles(element, clone);
+  clone.querySelectorAll(".no-export,.no-print").forEach((node) => node.remove());
+  clone.style.width = `${width}px`;
+  clone.style.minWidth = `${width}px`;
+  clone.style.height = `${height}px`;
+  clone.style.background = window.getComputedStyle(element).backgroundColor || "#ffffff";
+
+  const wrapper = document.createElement("div");
+  wrapper.setAttribute("xmlns", "http://www.w3.org/1999/xhtml");
+  wrapper.style.width = `${width}px`;
+  wrapper.style.height = `${height}px`;
+  wrapper.style.background = window.getComputedStyle(element).backgroundColor || "#ffffff";
+  wrapper.appendChild(clone);
+
+  const serialized = new XMLSerializer().serializeToString(wrapper);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><foreignObject width="100%" height="100%">${serialized}</foreignObject></svg>`;
+  const image = new Image();
+  const svgUrl = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml;charset=utf-8" }));
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      image.onload = () => resolve();
+      image.onerror = () => reject(new Error("Unable to render schedule export."));
+      image.src = svgUrl;
+    });
+    const scale = Math.min(2, window.devicePixelRatio || 1);
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(width * scale);
+    canvas.height = Math.round(height * scale);
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Unable to create schedule export.");
+    context.fillStyle = window.getComputedStyle(element).backgroundColor || "#ffffff";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.scale(scale, scale);
+    context.drawImage(image, 0, 0);
+    return canvas;
+  } finally {
+    URL.revokeObjectURL(svgUrl);
+  }
+}
+
+async function downloadScheduleSnapshot(element: HTMLElement | null, title: string, format: "png" | "pdf") {
+  if (!element) return;
+  const canvas = await renderElementToCanvas(element);
+  const filename = sanitizeFilename(title);
+
+  if (format === "png") {
+    canvas.toBlob((blob) => {
+      if (blob) downloadBlob(blob, `${filename}.png`);
+    }, "image/png");
+    return;
+  }
+
+  const jpegUrl = canvas.toDataURL("image/jpeg", 0.94);
+  downloadBlob(buildPdfFromJpeg(bytesFromDataUrl(jpegUrl), canvas.width, canvas.height), `${filename}.pdf`);
 }
 
 function Badge({ children, tone = "neutral" }: { children: React.ReactNode; tone?: "neutral" | "good" | "warn" | "danger" }) {
@@ -214,7 +344,7 @@ function Badge({ children, tone = "neutral" }: { children: React.ReactNode; tone
         tone === "neutral" && "border-line bg-white text-ink",
         tone === "good" && "border-approve/30 bg-approve/10 text-approve",
         tone === "warn" && "border-warn/35 bg-warn/10 text-warn",
-        tone === "danger" && "border-red-300 bg-red-50 text-red-700"
+        tone === "danger" && "border-red-500/40 bg-red-500/10 text-red-600"
       )}
     >
       {children}
@@ -237,7 +367,7 @@ function Button({
         variant === "primary" && "border-mall bg-mall text-white hover:bg-mall/90",
         variant === "secondary" && "border-line bg-white text-ink hover:bg-paper",
         variant === "danger" && "border-red-600 bg-red-600 text-white hover:bg-red-700",
-        variant === "ghost" && "border-transparent bg-transparent text-ink hover:bg-white",
+        variant === "ghost" && "border-transparent bg-transparent text-ink hover:bg-paper",
         className
       )}
       {...props}
@@ -267,22 +397,24 @@ function Section({
   icon,
   action,
   children,
-  className
+  className,
+  captureRef
 }: {
   title: string;
   icon: React.ReactNode;
   action?: React.ReactNode;
   children: React.ReactNode;
   className?: string;
+  captureRef?: React.RefObject<HTMLElement | null>;
 }) {
   return (
-    <section className={cx("print-surface min-w-0 rounded-lg border border-line bg-white shadow-panel", className)}>
-      <div className="flex min-h-14 items-center justify-between gap-3 border-b border-line px-4 py-3">
+    <section ref={captureRef} className={cx("print-surface min-w-0 rounded-lg border border-line bg-white shadow-panel", className)}>
+      <div className="flex min-h-12 items-center justify-between gap-3 border-b border-line px-4 py-3">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="grid size-8 shrink-0 place-items-center rounded-md bg-paper text-mall">{icon}</span>
+          <span className="grid size-8 shrink-0 place-items-center rounded-md bg-mall/10 text-mall">{icon}</span>
           <h2 className="truncate text-base font-bold text-ink">{title}</h2>
         </div>
-        {action}
+        {action ? <div className="no-export">{action}</div> : null}
       </div>
       <div className="p-4">{children}</div>
     </section>
@@ -301,12 +433,46 @@ function Metric({
   tone?: "neutral" | "good" | "warn";
 }) {
   return (
-    <div className="rounded-lg border border-line bg-white p-4">
+    <div className="rounded-lg border border-line bg-white p-4 shadow-panel">
       <div className="text-xs font-semibold uppercase tracking-normal text-ink/55">{label}</div>
-      <div className={cx("mt-2 text-2xl font-bold", tone === "good" && "text-approve", tone === "warn" && "text-warn")}>
+      <div className={cx("mt-2 text-2xl font-black", tone === "good" && "text-approve", tone === "warn" && "text-warn")}>
         {value}
       </div>
       <div className="mt-1 text-sm text-ink/65">{detail}</div>
+    </div>
+  );
+}
+
+function ScheduleExportButtons({
+  targetRef,
+  title
+}: {
+  targetRef: React.RefObject<HTMLElement | null>;
+  title: string;
+}) {
+  const [exporting, setExporting] = useState<"png" | "pdf" | null>(null);
+
+  async function exportSchedule(format: "png" | "pdf") {
+    setExporting(format);
+    try {
+      await downloadScheduleSnapshot(targetRef.current, title, format);
+    } catch {
+      window.alert("The schedule export could not be created. Try again after the schedule finishes rendering.");
+    } finally {
+      setExporting(null);
+    }
+  }
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      <Button variant="secondary" onClick={() => void exportSchedule("png")} disabled={exporting !== null}>
+        <Download size={16} />
+        {exporting === "png" ? "Exporting" : "Image"}
+      </Button>
+      <Button variant="secondary" onClick={() => void exportSchedule("pdf")} disabled={exporting !== null}>
+        <FileText size={16} />
+        {exporting === "pdf" ? "Exporting" : "PDF"}
+      </Button>
     </div>
   );
 }
@@ -317,7 +483,7 @@ export function TheScheduleApp() {
   const [activeEmployeeId, setActiveEmployeeId] = useState("emp_manager");
   const [people, setPeople] = useState<Employee[]>(employees);
   const [period, setPeriod] = useState<SchedulePeriod>(schedulePeriod);
-  const [shifts, setShifts] = useState<Shift[]>([]);
+  const [shifts, setShifts] = useState<Shift[]>(() => generateDefaultShifts(schedulePeriod));
   const [availability, setAvailability] = useState<AvailabilitySubmission[]>([]);
   const [coverage, setCoverage] = useState<CoverageRequest[]>([]);
   const [swaps, setSwaps] = useState<SwapRequest[]>([]);
@@ -334,12 +500,6 @@ export function TheScheduleApp() {
   const [showOnlyUnassigned, setShowOnlyUnassigned] = useState(false);
   const [showIssueReporter, setShowIssueReporter] = useState(false);
   const [showPublishReview, setShowPublishReview] = useState(false);
-  const [customShift, setCustomShift] = useState<CustomShiftForm>({
-    date: period.startDate,
-    startTime: "12:00",
-    endTime: "18:00",
-    notes: ""
-  });
   const [availabilityForm, setAvailabilityForm] = useState({
     date: period.startDate,
     unavailableType: "full_day" as UnavailableType,
@@ -353,8 +513,15 @@ export function TheScheduleApp() {
     targetShiftId: "",
     reason: ""
   });
-  const [newEmployee, setNewEmployee] = useState({
-    name: "",
+  const [newEmployee, setNewEmployee] = useState<EmployeeForm>({
+    firstName: "",
+    lastName: "",
+    email: ""
+  });
+  const [editingEmployeeId, setEditingEmployeeId] = useState<string | null>(null);
+  const [employeeEdit, setEmployeeEdit] = useState<EmployeeForm>({
+    firstName: "",
+    lastName: "",
     email: ""
   });
   const [issueForm, setIssueForm] = useState({
@@ -381,10 +548,27 @@ export function TheScheduleApp() {
   const finalHours = useMemo(() => calculateHours(people, shifts, false), [people, shifts]);
   const initialHours = useMemo(() => calculateHours(people, shifts, true), [people, shifts]);
   const activeSubmission = availability.find((submission) => submission.userId === activeEmployee.id);
-  const activeAvailabilityDraft = availabilityDrafts[activeEmployee.id] ?? [];
+  const activeAvailabilityDraft = sortUnavailableEntries(availabilityDrafts[activeEmployee.id] ?? []);
   const submittedIds = new Set(availability.filter((submission) => submission.submittedAt).map((submission) => submission.userId));
-  const missingAvailability = activeEmployees.filter((employee) => !submittedIds.has(employee.id));
-  const activeEmployeeNeedsAvailability = !submittedIds.has(activeEmployee.id);
+  const invitedEmployees = notifications.filter((entry) => entry.type === "employee_invited").length;
+  const hasAcceptedInvite = (employeeId: string) => inviteAcceptances.some((acceptance) => acceptance.employeeId === employeeId);
+  const hasInviteSent = (employeeId: string) =>
+    notifications.some((entry) => entry.type === "employee_invited" && entry.userId === employeeId);
+  const inviteStatusFor = (employee: Employee) => {
+    if (employee.role === "manager" || hasAcceptedInvite(employee.id)) return "active" as const;
+    if (hasInviteSent(employee.id) || employee.active) return "invited" as const;
+    return "inactive" as const;
+  };
+  const activeInviteStatus = inviteStatusFor(activeEmployee);
+  const activeInviteAccepted = activeInviteStatus === "active";
+  const schedulableEmployees = activeEmployees.filter((employee) => inviteStatusFor(employee) === "active");
+  const schedulableSubmittedIds = new Set(
+    availability
+      .filter((submission) => submission.submittedAt && schedulableEmployees.some((employee) => employee.id === submission.userId))
+      .map((submission) => submission.userId)
+  );
+  const missingAvailability = schedulableEmployees.filter((employee) => !submittedIds.has(employee.id));
+  const activeEmployeeNeedsAvailability = activeInviteAccepted && !submittedIds.has(activeEmployee.id);
   const myShifts = shifts
     .filter((shift) => shift.employeeId === activeEmployee.id)
     .sort((a, b) => `${a.date}${a.startTime}`.localeCompare(`${b.date}${b.startTime}`));
@@ -392,32 +576,50 @@ export function TheScheduleApp() {
   const pendingManagerRequests =
     coverage.filter((request) => request.status === "offered").length +
     swaps.filter((request) => request.status === "pending_manager_approval").length;
+  const employeeCoverageAlerts = openCoverage.filter((request) => {
+    const shift = shifts.find((item) => item.id === request.shiftId);
+    return shift && request.requestedById !== activeEmployee.id && shift.employeeId !== activeEmployee.id;
+  });
+  const employeeSwapAlerts = swaps.filter(
+    (request) => request.targetEmployeeId === activeEmployee.id && request.status === "pending_employee_response"
+  );
+  const activeEmployeeRequestCount = employeeCoverageAlerts.length + employeeSwapAlerts.length;
   const selectedShift = shifts.find((shift) => shift.id === selectedShiftId) ?? null;
   const unassignedShifts = shifts.filter((shift) => !shift.employeeId);
+  const assignedPendingInviteShifts = shifts.filter((shift) => {
+    const employee = shift.employeeId ? people.find((person) => person.id === shift.employeeId) : undefined;
+    return employee ? inviteStatusFor(employee) !== "active" : false;
+  });
   const assignedConflictShifts = shifts.filter((shift) =>
     shift.employeeId ? isEmployeeUnavailable(shift.employeeId, shift, availability) : false
   );
-  const invitedEmployees = notifications.filter((entry) => entry.type === "employee_invited").length;
-  const activeInviteAccepted = activeEmployee.role === "manager" || inviteAcceptances.some((acceptance) => acceptance.employeeId === activeEmployee.id);
   const openUatIssues = uatIssues.filter((issue) => issue.status === "open");
   const resolvedUatIssues = uatIssues.filter((issue) => issue.status === "resolved");
+  const availableShiftTemplates = useMemo(
+    () => shiftTemplates.filter((template) => template.dayPattern === templatePatternForDate(availabilityForm.date) && template.active),
+    [availabilityForm.date]
+  );
+  const testTodayIso = dateToIso(new Date(TEST_TODAY));
+  const canChangeAvailability = parseLocalDate(testTodayIso) <= parseLocalDate(period.availabilityDeadlineAt);
+  const canAutoAssignSchedule = schedulableEmployees.length > 0 && missingAvailability.length === 0;
   const publishWarnings = [
     shifts.length === 0 ? "Generate or add at least one shift before publishing." : "",
     missingAvailability.length > 0 ? `${missingAvailability.length} employee${missingAvailability.length === 1 ? " has" : "s have"} not submitted availability.` : "",
     unassignedShifts.length > 0 ? `${unassignedShifts.length} shift${unassignedShifts.length === 1 ? " is" : "s are"} unassigned.` : "",
+    assignedPendingInviteShifts.length > 0 ? `${assignedPendingInviteShifts.length} shift${assignedPendingInviteShifts.length === 1 ? " is" : "s are"} assigned to invited employees.` : "",
     assignedConflictShifts.length > 0 ? `${assignedConflictShifts.length} assigned shift${assignedConflictShifts.length === 1 ? " conflicts" : "s conflict"} with submitted availability.` : ""
   ].filter(Boolean);
   const uatItems = [
-    { label: "Invite an employee by Gmail", done: invitedEmployees > 0 },
-    { label: "Submit availability as at least one employee", done: submittedIds.size > 0 },
-    { label: "Submit no unavailable days as an employee", done: availability.some((submission) => submission.submittedAt && submission.unavailable.length === 0) },
-    { label: "Generate a manager draft", done: shifts.length > 0 },
-    { label: "Assign every shift or confirm the publish warning", done: shifts.length > 0 && unassignedShifts.length === 0 },
-    { label: "Publish the schedule", done: period.status === "published" },
-    { label: "Create a coverage request", done: coverage.length > 0 },
-    { label: "Create or approve a shift swap", done: swaps.length > 0 || swaps.some((swap) => swap.status === "approved") },
-    { label: "Accept an employee invite", done: inviteAcceptances.length > 0 },
-    { label: "Log and resolve a UAT issue", done: uatIssues.length > 0 && resolvedUatIssues.length > 0 }
+    { label: "Invite employee", done: invitedEmployees > 0 },
+    { label: "Submit availability", done: schedulableSubmittedIds.size > 0 },
+    { label: "Submit no days", done: availability.some((submission) => submission.submittedAt && submission.unavailable.length === 0) },
+    { label: "Auto assign draft", done: shifts.length > 0 && unassignedShifts.length === 0 },
+    { label: "Assign shifts", done: shifts.length > 0 && unassignedShifts.length === 0 },
+    { label: "Publish schedule", done: period.status === "published" },
+    { label: "Request coverage", done: coverage.length > 0 },
+    { label: "Test swap", done: swaps.length > 0 || swaps.some((swap) => swap.status === "approved") },
+    { label: "Accept invite", done: inviteAcceptances.length > 0 },
+    { label: "Resolve issue", done: uatIssues.length > 0 && resolvedUatIssues.length > 0 }
   ];
   const completedUatItems = uatItems.filter((item) => item.done).length;
   const currentIdentity = mode === "manager" ? managerIdentity : activeEmployee;
@@ -427,49 +629,49 @@ export function TheScheduleApp() {
       type: "employee_invited",
       subject: `Join ${store.name} on The Schedule`,
       recipient: "New employee",
-      body: `${currentIdentity?.name ?? "Your manager"} invited you to join ${store.name}. Use your approved Gmail to accept the invitation.`
+      body: `Invite link for ${store.name}.`
     },
     {
       type: "availability_submitted",
       subject: `${activeEmployee.name} submitted availability`,
       recipient: "Manager",
-      body: "The manager is notified when an employee submits or resubmits availability before release."
+      body: "Submission alert."
     },
     {
       type: "schedule_published",
       subject: `New schedule published: ${period.name}`,
       recipient: "Assigned employees",
-      body: "Each assigned employee receives a published schedule notice with their shift details."
+      body: "Schedule and shift details."
     },
     {
       type: "coverage_opened",
       subject: "A shift is open for coverage",
       recipient: "Other employees",
-      body: "Employees are notified when a teammate opens a shift for coverage."
+      body: "Open coverage alert."
     },
     {
       type: "swap_requested",
       subject: `${activeEmployee.name} requested a shift swap`,
       recipient: "Target employee",
-      body: "The target employee is asked to accept or decline the swap before manager approval."
+      body: "Accept or decline request."
     },
     {
       type: "manager_review",
       subject: "A request needs manager review",
       recipient: "Manager",
-      body: "Coverage offers and accepted swaps notify the manager that an approval decision is needed."
+      body: "Approval needed."
     },
     {
       type: "uat_issue_reported",
       subject: "[The Schedule] UAT issue reported",
       recipient: "Application owner",
-      body: "Every reported UAT issue is sent directly to the owner alert email for follow-up."
+      body: "Owner alert."
     },
     {
       type: "software_outage",
       subject: "[The Schedule] Software needs attention",
       recipient: "Application owner",
-      body: "Notification API failures and provider delivery failures trigger an owner alert."
+      body: "Delivery failure alert."
     }
   ];
   const testStep =
@@ -477,28 +679,41 @@ export function TheScheduleApp() {
       ? "Schedule published"
       : shifts.length > 0
         ? "Manager builds draft"
-        : missingAvailability.length < activeEmployees.length
+        : missingAvailability.length < schedulableEmployees.length
           ? "Collecting availability"
           : "Waiting for employee availability";
   const persistenceLabel =
     persistenceStatus === "loading"
-      ? "Loading saved test"
+      ? "Loading"
       : persistenceStatus === "saving"
-        ? "Saving test"
+        ? "Saving"
         : persistenceStatus === "saved"
-          ? "Server saved"
+          ? "Saved"
           : persistenceStatus === "local"
-            ? "Local fallback"
-            : "Save error";
+            ? "Local"
+            : "Error";
   const persistenceTone = persistenceStatus === "saved" ? "good" : persistenceStatus === "error" ? "danger" : "warn";
+
+  useEffect(() => {
+    if (availabilityForm.unavailableType !== "shift_template") return;
+    if (availableShiftTemplates.some((template) => template.id === availabilityForm.shiftTemplateId)) return;
+    setAvailabilityForm((current) => ({
+      ...current,
+      shiftTemplateId: availableShiftTemplates[0]?.id ?? current.shiftTemplateId
+    }));
+  }, [availabilityForm.shiftTemplateId, availabilityForm.unavailableType, availableShiftTemplates]);
 
   useEffect(() => {
     let cancelled = false;
 
     function applyStoredState(stored: Partial<StoredTestState>) {
+      const storedPeriod = stored.period ?? schedulePeriod;
       if (stored.people) setPeople(stored.people);
       if (stored.period) setPeriod(stored.period);
-      if (stored.shifts) setShifts(stored.shifts);
+      if (stored.shifts) {
+        const wasManuallyCleared = stored.auditLog?.some((entry) => entry.action === "all_shifts_cleared");
+        setShifts(stored.shifts.length > 0 || wasManuallyCleared ? stored.shifts : generateDefaultShifts(storedPeriod));
+      }
       if (stored.availability) setAvailability(stored.availability);
       if (stored.coverage) setCoverage(stored.coverage);
       if (stored.swaps) setSwaps(stored.swaps);
@@ -916,11 +1131,11 @@ export function TheScheduleApp() {
       return;
     }
 
-    const selected = people.find((employee) => employee.id === employeeId);
+    const selected = schedulableEmployees.find((employee) => employee.id === employeeId);
     if (!selected || !selected.active) return;
 
     const unavailable = isEmployeeUnavailable(employeeId, target, availability);
-    const available = availableEmployeesForShift(target, activeEmployees, availability);
+    const available = availableEmployeesForShift(target, schedulableEmployees, availability);
 
     if (unavailable && available.length > 0) {
       window.alert(`${selected.name} is unavailable. Assign ${available[0].name} or another available employee first.`);
@@ -953,8 +1168,51 @@ export function TheScheduleApp() {
     addAudit("shift_assigned", "Shift", shiftId, `Assigned ${selected.name} to ${getDayName(target.date)}.`);
   }
 
+  function autoAssignDraft(
+    generated: Shift[],
+    sourcePeople = schedulableEmployees,
+    sourceAvailability = availability
+  ) {
+    const totals = new Map(sourcePeople.map((employee) => [employee.id, { shifts: 0, hours: 0 }]));
+
+    return generated.map((shift) => {
+      const candidates = sourcePeople
+        .filter((employee) => employee.active && !isEmployeeUnavailable(employee.id, shift, sourceAvailability))
+        .map((employee) => {
+          const total = totals.get(employee.id) ?? { shifts: 0, hours: 0 };
+          return {
+            employee,
+            shifts: total.shifts,
+            hours: total.hours,
+            tieBreaker: Math.random()
+          };
+        })
+        .sort((a, b) => a.shifts - b.shifts || a.hours - b.hours || a.tieBreaker - b.tieBreaker);
+
+      const selected = candidates[0]?.employee;
+      if (!selected) return shift;
+
+      const current = totals.get(selected.id) ?? { shifts: 0, hours: 0 };
+      totals.set(selected.id, {
+        shifts: current.shifts + 1,
+        hours: current.hours + shiftDurationHours(shift)
+      });
+
+      return {
+        ...shift,
+        employeeId: selected.id
+      };
+    });
+  }
+
   function generateDraft() {
-    const generated = generateDefaultShifts(period);
+    const existingBlocks = shifts.length > 0 ? shifts : generateDefaultShifts(period);
+    const baseShifts = existingBlocks.map((shift) => ({
+      ...shift,
+      employeeId: undefined,
+      originalEmployeeId: undefined
+    }));
+    const generated = canAutoAssignSchedule ? autoAssignDraft(baseShifts) : baseShifts;
     setShifts(generated);
     setSelectedShiftId(generated[0]?.id ?? null);
     setPeriod((current) => ({ ...current, status: "draft", publishedAt: undefined }));
@@ -962,34 +1220,83 @@ export function TheScheduleApp() {
       "draft_generated",
       `Draft generated: ${period.name}`,
       "emp_manager",
-      buildNotificationHtml(`Draft generated: ${period.name}`, `${generated.length} shifts are ready for manager assignment.`)
+      buildNotificationHtml(
+        `Draft generated: ${period.name}`,
+        canAutoAssignSchedule
+          ? `${generated.length} shifts were balanced against availability.`
+          : `${generated.length} shift blocks were created without assignments. Collect availability before auto-assigning.`
+      )
     );
-    addAudit("default_shifts_generated", "SchedulePeriod", period.id, "Generated draft from configured shift templates.");
+    addAudit(
+      "default_shifts_generated",
+      "SchedulePeriod",
+      period.id,
+      canAutoAssignSchedule
+        ? "Auto-assigned the current shift blocks from availability."
+        : "Kept shift blocks unassigned because accepted employees have not all submitted availability."
+    );
   }
 
-  function addCustomShift() {
-    if (!customShift.date || !customShift.startTime || !customShift.endTime) return;
-    const start = Number(customShift.startTime.replace(":", ""));
-    const end = Number(customShift.endTime.replace(":", ""));
-    if (end <= start) {
+  function addShiftForDate(date: string) {
+    const template = shiftTemplates.find((item) => item.dayPattern === templatePatternForDate(date) && item.active);
+    const shift: Shift = {
+      id: `calendar_${date}_${Date.now()}`,
+      schedulePeriodId: period.id,
+      date,
+      startTime: template?.startTime ?? "12:00",
+      endTime: template?.endTime ?? "18:00",
+      originalStartTime: template?.startTime ?? "12:00",
+      originalEndTime: template?.endTime ?? "18:00"
+    };
+
+    setShifts((current) => [...current, shift].sort((a, b) => `${a.date}${a.startTime}`.localeCompare(`${b.date}${b.startTime}`)));
+    setSelectedShiftId(shift.id);
+    addAudit("calendar_shift_added", "Shift", shift.id, `Added shift on ${getDayName(date)}.`);
+  }
+
+  function updateShift(shiftId: string, updates: Partial<Pick<Shift, "date" | "startTime" | "endTime" | "employeeId">>) {
+    const target = shifts.find((shift) => shift.id === shiftId);
+    if (!target) return;
+
+    const nextStart = updates.startTime ?? target.startTime;
+    const nextEnd = updates.endTime ?? target.endTime;
+    if (!isValidTimeRange(nextStart, nextEnd)) {
       window.alert("End time must be later than start time.");
       return;
     }
 
-    const shift: Shift = {
-      id: `custom_${Date.now()}`,
-      schedulePeriodId: period.id,
-      date: customShift.date,
-      startTime: customShift.startTime,
-      endTime: customShift.endTime,
-      notes: customShift.notes,
-      originalStartTime: customShift.startTime,
-      originalEndTime: customShift.endTime
-    };
+    if (updates.employeeId !== undefined) {
+      assignShift(shiftId, updates.employeeId);
+    }
 
-    setShifts((current) => [...current, shift]);
-    setSelectedShiftId(shift.id);
-    addAudit("custom_shift_added", "Shift", shift.id, `Added ${formatTime(shift.startTime)}-${formatTime(shift.endTime)} on ${getDayName(shift.date)}.`);
+    const timeOrDateChanged = updates.date !== undefined || updates.startTime !== undefined || updates.endTime !== undefined;
+    if (!timeOrDateChanged) return;
+
+    setShifts((current) =>
+      current
+        .map((shift) =>
+          shift.id === shiftId
+            ? {
+                ...shift,
+                date: updates.date ?? shift.date,
+                startTime: nextStart,
+                endTime: nextEnd
+              }
+            : shift
+        )
+        .sort((a, b) => `${a.date}${a.startTime}`.localeCompare(`${b.date}${b.startTime}`))
+    );
+    addAudit("shift_time_updated", "Shift", shiftId, `Updated ${getDayName(updates.date ?? target.date)} shift time.`);
+  }
+
+  function clearAllShifts() {
+    if (shifts.length === 0) return;
+    const confirmed = window.confirm("Clear all shifts from this draft?");
+    if (!confirmed) return;
+    setShifts([]);
+    setSelectedShiftId(null);
+    setShowPublishReview(false);
+    addAudit("all_shifts_cleared", "SchedulePeriod", period.id, `Cleared ${shifts.length} shifts from the draft.`);
   }
 
   function removeShift(shiftId: string) {
@@ -1050,6 +1357,17 @@ export function TheScheduleApp() {
 
   function buildUnavailableEntry() {
     const template = shiftTemplates.find((item) => item.id === availabilityForm.shiftTemplateId);
+    if (availabilityForm.unavailableType === "shift_template" && !template) {
+      window.alert("Choose a shift template for that day.");
+      return null;
+    }
+    if (
+      availabilityForm.unavailableType === "custom_time_range" &&
+      !isValidTimeRange(availabilityForm.startTime, availabilityForm.endTime)
+    ) {
+      window.alert("End time must be later than start time.");
+      return null;
+    }
     const startTime =
       availabilityForm.unavailableType === "full_day"
         ? undefined
@@ -1077,7 +1395,16 @@ export function TheScheduleApp() {
   }
 
   function addAvailabilityDraftEntry() {
+    if (!activeInviteAccepted) {
+      window.alert("Accept the invite before submitting availability.");
+      return;
+    }
+    if (!canChangeAvailability) {
+      window.alert("Availability changes are closed for this schedule period.");
+      return;
+    }
     const entry = buildUnavailableEntry();
+    if (!entry) return;
     const existingDates = new Set([
       ...(activeSubmission?.unavailable ?? []).map((item) => item.date),
       ...activeAvailabilityDraft.map((item) => item.date)
@@ -1088,10 +1415,15 @@ export function TheScheduleApp() {
       return;
     }
 
+    const existingSubmitted = activeSubmission?.submittedAt ? activeSubmission.unavailable : [];
     setAvailabilityDrafts((current) => ({
       ...current,
-      [activeEmployee.id]: [...(current[activeEmployee.id] ?? []), entry]
+      [activeEmployee.id]: sortUnavailableEntries([...existingSubmitted, ...(current[activeEmployee.id] ?? []), entry])
     }));
+    if (activeSubmission?.submittedAt) {
+      setAvailability((current) => current.filter((submission) => submission.userId !== activeEmployee.id));
+      addAudit("availability_unsubmitted", "AvailabilitySubmission", activeEmployee.id, `${activeEmployee.name} reopened availability.`, activeEmployee.id);
+    }
 
     setAvailabilityForm((current) => ({ ...current, note: "" }));
   }
@@ -1104,6 +1436,24 @@ export function TheScheduleApp() {
   }
 
   function finalizeAvailability(submittedUnavailable: Unavailability[], note?: string) {
+    if (!activeInviteAccepted) {
+      window.alert("Accept the invite before submitting availability.");
+      return;
+    }
+    if (!canChangeAvailability) {
+      window.alert("Availability submissions are closed for this schedule period.");
+      return;
+    }
+    const invalid = submittedUnavailable.find(
+      (entry) => entry.unavailableType === "custom_time_range" && !isValidTimeRange(entry.startTime, entry.endTime)
+    );
+    if (invalid) {
+      window.alert(`Fix the time range on ${getDayName(invalid.date)} before submitting.`);
+      return;
+    }
+
+    const sortedUnavailable = sortUnavailableEntries(submittedUnavailable);
+
     setAvailability((current) => {
       const existing = current.find((submission) => submission.userId === activeEmployee.id);
       if (!existing) {
@@ -1115,7 +1465,7 @@ export function TheScheduleApp() {
             userId: activeEmployee.id,
             submittedAt: new Date().toISOString(),
             note,
-            unavailable: submittedUnavailable
+            unavailable: sortedUnavailable
           }
         ];
       }
@@ -1126,7 +1476,7 @@ export function TheScheduleApp() {
               ...submission,
               submittedAt: new Date().toISOString(),
               note: note || submission.note,
-              unavailable: submittedUnavailable
+              unavailable: sortedUnavailable
             }
           : submission
       );
@@ -1138,8 +1488,8 @@ export function TheScheduleApp() {
     }));
 
     const summary =
-      submittedUnavailable.length > 0
-        ? `${activeEmployee.name} submitted ${submittedUnavailable.length} unavailable day${submittedUnavailable.length === 1 ? "" : "s"}.`
+      sortedUnavailable.length > 0
+        ? `${activeEmployee.name} submitted ${sortedUnavailable.length} unavailable day${sortedUnavailable.length === 1 ? "" : "s"}.`
         : `${activeEmployee.name} submitted no unavailable days.`;
 
     addAudit("availability_submitted", "AvailabilitySubmission", activeEmployee.id, summary, activeEmployee.id);
@@ -1151,27 +1501,98 @@ export function TheScheduleApp() {
     );
   }
 
-  function submitAvailability() {
-    finalizeAvailability([...(activeSubmission?.unavailable ?? []), ...activeAvailabilityDraft], availabilityForm.note);
+  function unsubmitAvailability() {
+    if (!activeSubmission?.submittedAt) return;
+    if (!activeInviteAccepted) return;
+    if (!canChangeAvailability) {
+      window.alert("Availability changes are closed for this schedule period.");
+      return;
+    }
+
+    setAvailabilityDrafts((current) => ({
+      ...current,
+      [activeEmployee.id]: sortUnavailableEntries(activeSubmission.unavailable.map((entry) => ({ ...entry, id: `draft_${entry.id}_${Date.now()}` })))
+    }));
+    setAvailability((current) => current.filter((submission) => submission.userId !== activeEmployee.id));
+    addAudit("availability_unsubmitted", "AvailabilitySubmission", activeEmployee.id, `${activeEmployee.name} unsubmitted availability.`, activeEmployee.id);
   }
 
-  function submitNoUnavailableDays() {
-    finalizeAvailability([], "Fully available");
+  function submitAvailability() {
+    finalizeAvailability([...(activeSubmission?.unavailable ?? []), ...activeAvailabilityDraft], availabilityForm.note);
   }
 
   function beginEditAvailability() {
     if (!activeSubmission?.submittedAt) return;
 
-    setAvailabilityDrafts((current) => ({
-      ...current,
-      [activeEmployee.id]: activeSubmission.unavailable.map((entry) => ({ ...entry, id: `draft_${entry.id}_${Date.now()}` }))
-    }));
-    setAvailability((current) => current.filter((submission) => submission.userId !== activeEmployee.id));
-    addAudit("availability_edit_started", "AvailabilitySubmission", activeEmployee.id, `${activeEmployee.name} reopened availability before release.`, activeEmployee.id);
+    unsubmitAvailability();
+  }
+
+  function employeeHasShiftOnDate(employeeId: string, date: string, ignoredShiftIds: string[] = []) {
+    return shifts.some((shift) => shift.employeeId === employeeId && shift.date === date && !ignoredShiftIds.includes(shift.id));
+  }
+
+  function coverageBlockReason(request: CoverageRequest, employeeId: string) {
+    const shift = shifts.find((item) => item.id === request.shiftId);
+    if (!shift) return "Shift not found.";
+    if (shift.employeeId === employeeId || request.requestedById === employeeId) return "This is already your shift.";
+    if (employeeHasShiftOnDate(employeeId, shift.date)) return "You already work that day.";
+    if (isEmployeeUnavailable(employeeId, shift, availability)) return "You are unavailable for that shift.";
+    return "";
+  }
+
+  function swapBlockReason(requesterShift: Shift, targetShift: Shift) {
+    if (!targetShift.employeeId) return "Target shift is unassigned.";
+    if (requesterShift.employeeId !== activeEmployee.id) return "Select one of your own shifts.";
+    if (targetShift.employeeId === activeEmployee.id) return "Select another employee's shift.";
+    if (employeeHasShiftOnDate(activeEmployee.id, targetShift.date, [requesterShift.id])) {
+      return "You already work on the day you would receive.";
+    }
+    if (employeeHasShiftOnDate(targetShift.employeeId, requesterShift.date, [targetShift.id])) {
+      return `${nameFor(targetShift.employeeId)} already works on the day they would receive.`;
+    }
+    if (isEmployeeUnavailable(activeEmployee.id, targetShift, availability)) {
+      return "You are unavailable for the shift you would receive.";
+    }
+    if (isEmployeeUnavailable(targetShift.employeeId, requesterShift, availability)) {
+      return `${nameFor(targetShift.employeeId)} is unavailable for the shift they would receive.`;
+    }
+    return "";
+  }
+
+  function swapApprovalBlockReason(request: SwapRequest) {
+    const requesterShift = shifts.find((shift) => shift.id === request.requesterShiftId);
+    const targetShift = shifts.find((shift) => shift.id === request.targetShiftId);
+    if (!requesterShift || !targetShift || !targetShift.employeeId) return "Swap shifts are no longer valid.";
+    if (employeeHasShiftOnDate(request.requesterId, targetShift.date, [requesterShift.id])) {
+      return `${nameFor(request.requesterId)} already works on the day they would receive.`;
+    }
+    if (employeeHasShiftOnDate(targetShift.employeeId, requesterShift.date, [targetShift.id])) {
+      return `${nameFor(targetShift.employeeId)} already works on the day they would receive.`;
+    }
+    if (isEmployeeUnavailable(request.requesterId, targetShift, availability)) {
+      return `${nameFor(request.requesterId)} is unavailable for the shift they would receive.`;
+    }
+    if (isEmployeeUnavailable(targetShift.employeeId, requesterShift, availability)) {
+      return `${nameFor(targetShift.employeeId)} is unavailable for the shift they would receive.`;
+    }
+    return "";
+  }
+
+  function currentSwapBlockReason() {
+    const requesterShift = shifts.find((shift) => shift.id === swapForm.requesterShiftId);
+    const targetShift = shifts.find((shift) => shift.id === swapForm.targetShiftId);
+    if (!requesterShift || !targetShift) return "";
+    return swapBlockReason(requesterShift, targetShift);
   }
 
   function requestCoverage(shiftId: string) {
+    if (!activeInviteAccepted) {
+      window.alert("Accept the invite before requesting coverage.");
+      return;
+    }
     if (coverage.some((request) => request.shiftId === shiftId && request.status !== "cancelled")) return;
+    const shift = shifts.find((item) => item.id === shiftId);
+    if (!shift) return;
 
     const request: CoverageRequest = {
       id: `coverage_${Date.now()}`,
@@ -1185,22 +1606,46 @@ export function TheScheduleApp() {
       "coverage_requested",
       `${activeEmployee.name} requested coverage`,
       "emp_manager",
-      buildNotificationHtml(`${activeEmployee.name} requested coverage`, `${activeEmployee.name} opened a shift for coverage in ${period.name}.`)
+      buildNotificationHtml(
+        `${activeEmployee.name} requested coverage`,
+        `${activeEmployee.name} is asking for ${getDayName(shift.date)} ${formatTime(shift.startTime)}-${formatTime(shift.endTime)} to be covered.`
+      )
     );
-    activeEmployees
+    schedulableEmployees
       .filter((employee) => employee.id !== activeEmployee.id)
       .forEach((employee) =>
         addNotification(
           "coverage_opened",
           "A shift is open for coverage",
           employee.id,
-          buildNotificationHtml("A shift is open for coverage", `${activeEmployee.name} opened a shift for coverage in ${period.name}.`)
+          buildNotificationHtml(
+            "A shift is open for coverage",
+            `${activeEmployee.name} opened ${getDayName(shift.date)} ${formatTime(shift.startTime)}-${formatTime(shift.endTime)} for coverage.`
+          )
         )
       );
-    addAudit("coverage_requested", "CoverageRequest", request.id, `${activeEmployee.name} opened a shift for coverage.`, activeEmployee.id);
+    addAudit(
+      "coverage_requested",
+      "CoverageRequest",
+      request.id,
+      `${activeEmployee.name} opened ${getDayName(shift.date)} ${formatTime(shift.startTime)}-${formatTime(shift.endTime)} for coverage.`,
+      activeEmployee.id
+    );
   }
 
   function offerCoverage(requestId: string) {
+    if (!activeInviteAccepted) {
+      window.alert("Accept the invite before offering coverage.");
+      return;
+    }
+    const request = coverage.find((item) => item.id === requestId);
+    if (!request) return;
+    const blocked = coverageBlockReason(request, activeEmployee.id);
+    if (blocked) {
+      window.alert(blocked);
+      return;
+    }
+    const shift = shifts.find((item) => item.id === request.shiftId);
     setCoverage((current) =>
       current.map((request) =>
         request.id === requestId ? { ...request, claimedById: activeEmployee.id, status: "offered" } : request
@@ -1210,7 +1655,18 @@ export function TheScheduleApp() {
       "coverage_offer",
       `${activeEmployee.name} offered to cover a shift`,
       "emp_manager",
-      buildNotificationHtml(`${activeEmployee.name} offered to cover a shift`, "Review the offer in manager requests.")
+      buildNotificationHtml(
+        `${activeEmployee.name} offered to cover a shift`,
+        shift
+          ? `${activeEmployee.name} offered to cover ${nameFor(request.requestedById)}'s ${getDayName(shift.date)} ${formatTime(shift.startTime)}-${formatTime(shift.endTime)} shift.`
+          : "Review the offer in manager requests."
+      )
+    );
+    addNotification(
+      "coverage_offer",
+      `${activeEmployee.name} offered to cover your shift`,
+      request.requestedById,
+      buildNotificationHtml(`${activeEmployee.name} offered to cover your shift`, "A manager still needs to approve the coverage change.")
     );
     addAudit("coverage_offered", "CoverageRequest", requestId, `${activeEmployee.name} offered to cover.`, activeEmployee.id);
   }
@@ -1218,6 +1674,13 @@ export function TheScheduleApp() {
   function approveCoverage(requestId: string, approved: boolean) {
     const request = coverage.find((item) => item.id === requestId);
     if (!request) return;
+    if (approved && request.claimedById) {
+      const blocked = coverageBlockReason(request, request.claimedById);
+      if (blocked) {
+        window.alert(blocked);
+        return;
+      }
+    }
 
     setCoverage((current) =>
       current.map((item) =>
@@ -1235,11 +1698,23 @@ export function TheScheduleApp() {
       setShifts((current) =>
         current.map((shift) => (shift.id === request.shiftId ? { ...shift, employeeId: request.claimedById } : shift))
       );
-      addNotification("coverage_approved", "Coverage change approved", request.requestedById);
-      addNotification("coverage_approved", "Coverage change approved", request.claimedById);
+      addNotification(
+        "coverage_approved",
+        "Coverage change approved",
+        request.requestedById,
+        buildNotificationHtml("Coverage change approved", `${nameFor(request.claimedById)} is now covering your shift.`)
+      );
+      addNotification(
+        "coverage_approved",
+        "Coverage change approved",
+        request.claimedById,
+        buildNotificationHtml("Coverage change approved", `You are now assigned to cover ${nameFor(request.requestedById)}'s shift.`)
+      );
     } else {
-      addNotification("coverage_rejected", "Coverage change rejected", request.requestedById);
-      if (request.claimedById) addNotification("coverage_rejected", "Coverage change rejected", request.claimedById);
+      addNotification("coverage_rejected", "Coverage change rejected", request.requestedById, buildNotificationHtml("Coverage change rejected", "The coverage request was not approved."));
+      if (request.claimedById) {
+        addNotification("coverage_rejected", "Coverage change rejected", request.claimedById, buildNotificationHtml("Coverage change rejected", "The coverage offer was not approved."));
+      }
     }
 
     addAudit(
@@ -1251,9 +1726,18 @@ export function TheScheduleApp() {
   }
 
   function requestSwap() {
+    if (!activeInviteAccepted) {
+      window.alert("Accept the invite before requesting a swap.");
+      return;
+    }
     const requesterShift = shifts.find((shift) => shift.id === swapForm.requesterShiftId);
     const targetShift = shifts.find((shift) => shift.id === swapForm.targetShiftId);
     if (!requesterShift || !targetShift || !targetShift.employeeId) return;
+    const blocked = swapBlockReason(requesterShift, targetShift);
+    if (blocked) {
+      window.alert(blocked);
+      return;
+    }
 
     const request: SwapRequest = {
       id: `swap_${Date.now()}`,
@@ -1270,12 +1754,28 @@ export function TheScheduleApp() {
       "swap_requested",
       `${activeEmployee.name} requested a shift swap`,
       targetShift.employeeId,
-      buildNotificationHtml(`${activeEmployee.name} requested a shift swap`, "Respond to the swap request in The Schedule.")
+      buildNotificationHtml(
+        `${activeEmployee.name} requested a shift swap`,
+        `${activeEmployee.name} wants to trade ${getDayName(requesterShift.date)} ${formatTime(requesterShift.startTime)} for your ${getDayName(targetShift.date)} ${formatTime(targetShift.startTime)} shift.`
+      )
     );
     addAudit("swap_requested", "SwapRequest", request.id, `${activeEmployee.name} requested a shift swap.`, activeEmployee.id);
   }
 
   function acceptSwap(requestId: string, accepted: boolean) {
+    if (!activeInviteAccepted) {
+      window.alert("Accept the invite before responding to swaps.");
+      return;
+    }
+    const request = swaps.find((item) => item.id === requestId);
+    if (!request) return;
+    if (accepted) {
+      const blocked = swapApprovalBlockReason(request);
+      if (blocked) {
+        window.alert(blocked);
+        return;
+      }
+    }
     setSwaps((current) =>
       current.map((request) =>
         request.id === requestId
@@ -1283,13 +1783,37 @@ export function TheScheduleApp() {
           : request
       )
     );
-    addNotification("swap_response", accepted ? "A swap is ready for manager approval" : "A swap was declined", "emp_manager");
+    addNotification(
+      "swap_response",
+      accepted ? "A swap is ready for manager approval" : "A swap was declined",
+      "emp_manager",
+      buildNotificationHtml(
+        accepted ? "A swap is ready for manager approval" : "A swap was declined",
+        `${activeEmployee.name} ${accepted ? "accepted" : "declined"} ${nameFor(request.requesterId)}'s swap request.`
+      )
+    );
+    addNotification(
+      "swap_response",
+      accepted ? "Swap accepted by coworker" : "Swap declined by coworker",
+      request.requesterId,
+      buildNotificationHtml(
+        accepted ? "Swap accepted by coworker" : "Swap declined by coworker",
+        accepted ? "A manager still needs to approve the swap." : `${activeEmployee.name} declined the swap.`
+      )
+    );
     addAudit(accepted ? "swap_employee_accepted" : "swap_employee_declined", "SwapRequest", requestId, "Employee responded to swap.", activeEmployee.id);
   }
 
   function approveSwap(requestId: string, approved: boolean) {
     const request = swaps.find((item) => item.id === requestId);
     if (!request || !request.targetShiftId) return;
+    if (approved) {
+      const blocked = swapApprovalBlockReason(request);
+      if (blocked) {
+        window.alert(blocked);
+        return;
+      }
+    }
 
     setSwaps((current) =>
       current.map((item) => (item.id === requestId ? { ...item, status: approved ? "approved" : "rejected_by_manager" } : item))
@@ -1307,11 +1831,11 @@ export function TheScheduleApp() {
           return shift;
         });
       });
-      addNotification("swap_approved", "Shift swap approved", request.requesterId);
-      addNotification("swap_approved", "Shift swap approved", request.targetEmployeeId);
+      addNotification("swap_approved", "Shift swap approved", request.requesterId, buildNotificationHtml("Shift swap approved", "Your schedule was updated with the approved swap."));
+      addNotification("swap_approved", "Shift swap approved", request.targetEmployeeId, buildNotificationHtml("Shift swap approved", "Your schedule was updated with the approved swap."));
     } else {
-      addNotification("swap_rejected", "Shift swap rejected", request.requesterId);
-      addNotification("swap_rejected", "Shift swap rejected", request.targetEmployeeId);
+      addNotification("swap_rejected", "Shift swap rejected", request.requesterId, buildNotificationHtml("Shift swap rejected", "The manager rejected the swap."));
+      addNotification("swap_rejected", "Shift swap rejected", request.targetEmployeeId, buildNotificationHtml("Shift swap rejected", "The manager rejected the swap."));
     }
 
     addAudit(approved ? "swap_approved" : "swap_rejected", "SwapRequest", requestId, approved ? "Manager approved a swap." : "Manager rejected a swap.");
@@ -1327,9 +1851,42 @@ export function TheScheduleApp() {
     URL.revokeObjectURL(url);
   }
 
+  function beginEditEmployee(employee: Employee) {
+    const parts = employeeNameParts(employee.name);
+    setEditingEmployeeId(employee.id);
+    setEmployeeEdit({
+      ...parts,
+      email: employee.email
+    });
+  }
+
+  function cancelEditEmployee() {
+    setEditingEmployeeId(null);
+    setEmployeeEdit({ firstName: "", lastName: "", email: "" });
+  }
+
+  function saveEmployeeEdit(employeeId: string) {
+    const email = employeeEdit.email.trim().toLowerCase();
+    const name = employeeFullName(employeeEdit);
+    if (!name || !email) return;
+    if (people.some((employee) => employee.id !== employeeId && employee.email.toLowerCase() === email)) {
+      window.alert("That Gmail account is already approved.");
+      return;
+    }
+
+    setPeople((current) =>
+      current.map((employee) => (employee.id === employeeId ? { ...employee, name, email } : employee))
+    );
+    setInviteAcceptances((current) =>
+      current.map((acceptance) => (acceptance.employeeId === employeeId ? { ...acceptance, name, email } : acceptance))
+    );
+    addAudit("employee_updated", "User", employeeId, `Updated employee info for ${name}.`);
+    cancelEditEmployee();
+  }
+
   function addEmployee() {
     const email = newEmployee.email.trim().toLowerCase();
-    const name = newEmployee.name.trim();
+    const name = employeeFullName(newEmployee);
     if (!email || !name) return;
     if (people.some((employee) => employee.email.toLowerCase() === email)) {
       window.alert("That Gmail account is already approved.");
@@ -1345,7 +1902,7 @@ export function TheScheduleApp() {
     };
 
     setPeople((current) => [...current, employee]);
-    setNewEmployee({ name: "", email: "" });
+    setNewEmployee({ firstName: "", lastName: "", email: "" });
     const notificationId = addNotification(
       "employee_invited",
       `Join ${store.name} on The Schedule`,
@@ -1396,36 +1953,13 @@ export function TheScheduleApp() {
     addAudit("employee_invited", "User", employee.id, `Invited ${employee.email} to join ${store.name}.`);
   }
 
-  function quickAssignSelectedShift() {
-    if (!selectedShift) return;
-
-    const available = activeEmployees
-      .filter((employee) => !isEmployeeUnavailable(employee.id, selectedShift, availability))
-      .map((employee) => {
-        const total = finalHours.find((item) => item.employeeId === employee.id);
-        return {
-          employee,
-          hours: total?.hours ?? 0,
-          shifts: total?.shifts ?? 0
-        };
-      })
-      .sort((a, b) => a.hours - b.hours || a.shifts - b.shifts || a.employee.name.localeCompare(b.employee.name));
-
-    if (!available[0]) {
-      window.alert("No available employees for this shift. Use an override only if you really need to.");
-      return;
-    }
-
-    assignShift(selectedShift.id, available[0].employee.id);
-  }
-
   function resetTestRun() {
     setMode("manager");
     setActiveTab("dashboard");
     setActiveEmployeeId("emp_manager");
     setPeople(employees);
     setPeriod(schedulePeriod);
-    setShifts([]);
+    setShifts(generateDefaultShifts(schedulePeriod));
     setAvailability([]);
     setCoverage([]);
     setSwaps([]);
@@ -1438,6 +1972,7 @@ export function TheScheduleApp() {
     setShowOnlyUnassigned(false);
     setShowIssueReporter(false);
     setShowPublishReview(false);
+    cancelEditEmployee();
     window.localStorage.removeItem(STORAGE_KEY);
     setPersistenceStatus("saving");
     void fetch("/api/test-state", { method: "DELETE" })
@@ -1449,7 +1984,21 @@ export function TheScheduleApp() {
   }
 
   function applyScenarioPreset(preset: ScenarioPreset) {
-    const generatedDraft = generateDefaultShifts(schedulePeriod);
+    const presetAvailability = preset === "fresh" ? [] : availabilitySubmissions;
+    const defaultShiftBlocks = generateDefaultShifts(schedulePeriod);
+    const presetInviteAcceptances =
+      preset === "fresh"
+        ? []
+        : employees
+            .filter((employee) => employee.role === "employee")
+            .map((employee) => ({
+              id: `preset_acceptance_${employee.id}`,
+              employeeId: employee.id,
+              acceptedAt: "2026-07-06T18:00:00.000Z",
+              email: employee.email,
+              name: employee.name
+            }));
+    const generatedDraft = autoAssignDraft(defaultShiftBlocks, employees, presetAvailability);
     const nextPeriod =
       preset === "published"
         ? { ...schedulePeriod, status: "published" as const, publishedAt: "2026-07-14T16:00:00.000Z" }
@@ -1459,14 +2008,14 @@ export function TheScheduleApp() {
         ? generatedDraft
         : preset === "published"
           ? initialShifts
-          : [];
+          : defaultShiftBlocks;
 
     setMode("manager");
     setActiveTab("dashboard");
     setPeople(employees);
     setPeriod(nextPeriod);
     setShifts(nextShifts);
-    setAvailability(preset === "fresh" ? [] : availabilitySubmissions);
+    setAvailability(presetAvailability);
     setCoverage(preset === "published" ? coverageRequests : []);
     setSwaps(preset === "published" ? swapRequests : []);
     setAuditLog([
@@ -1484,11 +2033,12 @@ export function TheScheduleApp() {
     setNotifications([]);
     setAvailabilityDrafts({});
     setUatIssues([]);
-    setInviteAcceptances([]);
+    setInviteAcceptances(presetInviteAcceptances);
     setSelectedShiftId(nextShifts[0]?.id ?? null);
     setShowOnlyUnassigned(false);
     setShowIssueReporter(false);
     setShowPublishReview(false);
+    cancelEditEmployee();
   }
 
   const managerTabs: Array<{ id: TabId; label: string; icon: React.ReactNode }> = [
@@ -1515,35 +2065,22 @@ export function TheScheduleApp() {
 
   return (
     <main className="min-h-screen bg-paper text-ink">
-      <header className="no-print sticky top-0 z-30 border-b border-line bg-paper/95 backdrop-blur">
+      <header className="no-print sticky top-0 z-30 border-b border-line bg-white">
         <div className="mx-auto flex max-w-[1800px] flex-col gap-3 px-4 py-3 xl:px-6 2xl:px-8 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="grid h-12 w-28 shrink-0 place-items-center overflow-hidden rounded-lg border border-line bg-black px-2 shadow-panel sm:w-36">
-              <Image
-                src="/men-are-from-mars-logo.png"
-                alt="Men Are From Mars"
-                width={220}
-                height={92}
-                className="h-auto w-full object-contain"
-                priority
-              />
-            </div>
             <div className="min-w-0">
-              <h1 className="truncate text-xl font-black">The Schedule</h1>
-              <p className="truncate text-sm text-ink/65">
-                {store.name} - {period.name}
-              </p>
+              <h1 className="truncate text-lg font-black sm:text-xl">The Schedule</h1>
+              <p className="truncate text-sm text-ink/60">{store.name}</p>
             </div>
             <Badge tone={period.status === "published" ? "good" : "warn"}>{period.status}</Badge>
             <Badge tone={persistenceTone}>{persistenceLabel}</Badge>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <div className="hidden max-w-[340px] items-center gap-2 rounded-lg border border-line bg-white px-3 py-2 text-sm md:flex">
+            <div className="hidden max-w-[260px] items-center gap-2 rounded-md border border-line bg-paper px-3 py-2 text-sm md:flex">
               <ShieldCheck size={16} className="shrink-0 text-mall" />
               <span className="truncate">
-                Acting as <strong>{currentIdentity?.name ?? "Test user"}</strong>
-                {currentIdentity?.email ? ` - ${currentIdentity.email}` : ""}
+                <strong>{currentIdentity?.name ?? "Test user"}</strong>
               </span>
             </div>
             <div className="inline-flex rounded-lg border border-line bg-white p-1">
@@ -1588,11 +2125,11 @@ export function TheScheduleApp() {
             </Button>
             <Button variant="secondary" onClick={() => void sendTestEmail()} disabled={testEmailStatus === "sending"}>
               <Mail size={16} />
-              {testEmailStatus === "sending" ? "Sending" : "Test email"}
+              {testEmailStatus === "sending" ? "Sending" : "Test"}
             </Button>
             <Button variant="secondary" onClick={resetTestRun}>
               <RefreshCw size={16} />
-              Reset test
+              Reset
             </Button>
           </div>
         </div>
@@ -1603,7 +2140,11 @@ export function TheScheduleApp() {
               className={cx(
                 "inline-flex h-9 shrink-0 items-center gap-2 rounded-md border px-3 text-sm font-semibold",
                 activeTab === tab.id ? "border-mall bg-mall text-white" : "border-line bg-white text-ink hover:bg-paper",
-                mode === "employee" && tab.id === "submit" && activeEmployeeNeedsAvailability && activeTab !== tab.id && "border-warn bg-warn/10 text-warn"
+                mode === "employee" && tab.id === "submit" && activeEmployeeNeedsAvailability && activeTab !== tab.id && "border-warn bg-warn/10 text-warn",
+                tab.id === "requests" &&
+                  (mode === "manager" ? pendingManagerRequests > 0 : activeEmployeeRequestCount > 0) &&
+                  activeTab !== tab.id &&
+                  "border-warn bg-warn/10 text-warn"
               )}
               onClick={() => setActiveTab(tab.id)}
             >
@@ -1624,18 +2165,23 @@ export function TheScheduleApp() {
                   {openUatIssues.length}
                 </span>
               )}
+              {tab.id === "requests" && (mode === "manager" ? pendingManagerRequests > 0 : activeEmployeeRequestCount > 0) && (
+                <span className={cx("grid min-w-5 place-items-center rounded-full px-1 text-[11px]", activeTab === tab.id ? "bg-white text-warn" : "bg-warn text-white")}>
+                  {mode === "manager" ? pendingManagerRequests : activeEmployeeRequestCount}
+                </span>
+              )}
             </button>
           ))}
         </nav>
       </header>
 
-      <div className="no-print border-b border-line bg-white">
-        <div className="mx-auto flex max-w-[1800px] flex-col gap-3 px-4 py-3 text-sm xl:px-6 2xl:px-8 lg:flex-row lg:items-center lg:justify-between">
+      <div className="no-print border-b border-line bg-paper">
+        <div className="mx-auto flex max-w-[1800px] flex-col gap-3 px-4 py-2.5 text-sm xl:px-6 2xl:px-8 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-start gap-2">
             <ShieldCheck size={17} className="mt-0.5 shrink-0 text-mall" />
             <div>
               <span className="font-black">Test mode</span>
-              <span className="text-ink/65"> - switch between manager and employees, queue Gmail notifications, and load UAT presets before real Google login.</span>
+              <span className="text-ink/60"> - role switcher and UAT presets</span>
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -1692,22 +2238,16 @@ export function TheScheduleApp() {
 
         {activeTab === "dashboard" && mode === "employee" && (
           <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
-            <Section title={`${activeEmployee.name}'s Test Workspace`} icon={<CalendarDays size={18} />}>
+            <Section title={activeEmployee.name} icon={<CalendarDays size={18} />}>
               <div className="grid gap-3">
-                <div className={cx("rounded-lg border p-4", activeInviteAccepted ? "border-approve/30 bg-approve/10" : "border-mall/30 bg-mall/10")}>
+                <div className={cx("rounded-lg border p-4", activeInviteAccepted ? "border-approve/30 bg-approve/10" : "border-warn bg-warn/10")}>
                   <div className="flex items-start gap-3">
                     <span className={cx("mt-0.5", activeInviteAccepted ? "text-approve" : "text-mall")}>
                       {activeInviteAccepted ? <Check size={20} /> : <Mail size={20} />}
                     </span>
                     <div className="min-w-0">
-                      <div className="font-black">{activeInviteAccepted ? "Invite accepted" : "Invite acceptance mock"}</div>
-                      <p className="mt-1 text-sm text-ink/70">
-                        {activeEmployee.role === "manager"
-                          ? `${activeEmployee.email} is the approved manager account and can also complete employee tasks from this view.`
-                          : activeInviteAccepted
-                          ? `${activeEmployee.email} has confirmed access for this test run.`
-                          : `Pretend ${activeEmployee.email} opened the Gmail invite and accepted access.`}
-                      </p>
+                      <div className="font-black">{activeInviteAccepted ? "Active" : "Invited"}</div>
+                      <div className="mt-1 text-sm text-ink/60">{activeEmployee.email}</div>
                     </div>
                   </div>
                   {!activeInviteAccepted && (
@@ -1723,9 +2263,7 @@ export function TheScheduleApp() {
                       <ShieldCheck className="mt-0.5 text-mall" size={20} />
                       <div>
                         <div className="font-black">Manager floor view</div>
-                        <p className="mt-1 text-sm text-ink/70">
-                          You are still the manager account, but this view lets you submit your own availability, see your shifts, request coverage, and test employee tasks.
-                        </p>
+                        <div className="mt-1 text-sm text-ink/60">Employee tools for the manager account.</div>
                       </div>
                     </div>
                   </div>
@@ -1744,9 +2282,7 @@ export function TheScheduleApp() {
                       <div className="font-black">
                         {activeEmployeeNeedsAvailability ? "Availability still needed" : "Availability submitted"}
                       </div>
-                      <p className="mt-1 text-sm text-ink/70">
-                        Test date is {TEST_TODAY}. The release is {period.releaseDate}, so this is the employee submission window.
-                      </p>
+                      <div className="mt-1 text-sm text-ink/60">Due before {period.releaseDate}</div>
                     </div>
                   </div>
                   {activeEmployeeNeedsAvailability && (
@@ -1777,27 +2313,27 @@ export function TheScheduleApp() {
                     </Button>
                   </div>
                 </div>
-                <div className="grid gap-2 rounded-lg border border-line p-4">
-                  <div className="text-xs font-semibold uppercase tracking-normal text-ink/55">Test flow</div>
+                <div className="grid gap-2 rounded-lg border border-line bg-paper p-4">
+                  <div className="text-xs font-semibold uppercase tracking-normal text-ink/55">Flow</div>
                   <div className="grid gap-2 text-sm">
                     <div className="flex items-center gap-2">
                       <Badge tone={activeEmployeeNeedsAvailability ? "warn" : "good"}>1</Badge>
-                      Submit unavailable days as a few employees.
+                      Submit availability.
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge tone={shifts.length > 0 ? "good" : "neutral"}>2</Badge>
-                      Switch to manager, generate shifts, and assign names.
+                      Build the draft.
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge tone={period.status === "published" ? "good" : "neutral"}>3</Badge>
-                      Publish the schedule and review employee schedule views.
+                      Publish and review.
                     </div>
                   </div>
                 </div>
               </div>
             </Section>
             <Section title="My Upcoming Shifts" icon={<Clock size={18} />}>
-              <ShiftList shifts={myShifts} onRequestCoverage={requestCoverage} />
+              <ShiftList shifts={myShifts} coverageRequests={coverage} onRequestCoverage={requestCoverage} />
             </Section>
           </div>
         )}
@@ -1805,20 +2341,25 @@ export function TheScheduleApp() {
         {activeTab === "dashboard" && mode === "manager" && (
           <div className="grid gap-4">
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <Metric label="Test date" value={TEST_TODAY} detail={`Current step: ${testStep}`} tone={period.status === "published" ? "good" : "warn"} />
-              <Metric label="Availability" value={`${submittedIds.size}/${activeEmployees.length}`} detail={`${missingAvailability.length} still missing`} tone={submittedIds.size === activeEmployees.length ? "good" : "warn"} />
+              <Metric label="Test date" value={TEST_TODAY} detail={testStep} tone={period.status === "published" ? "good" : "warn"} />
+              <Metric
+                label="Availability"
+                value={`${schedulableSubmittedIds.size}/${schedulableEmployees.length}`}
+                detail={`${missingAvailability.length} still missing`}
+                tone={schedulableSubmittedIds.size === schedulableEmployees.length ? "good" : "warn"}
+              />
               <Metric label="Open requests" value={String(pendingManagerRequests)} detail="Need manager action" tone={pendingManagerRequests ? "warn" : "good"} />
               <Metric label="Draft shifts" value={String(shifts.length)} detail={shifts.length ? "Ready for assignment" : "Generate from templates"} />
             </div>
 
-            <Section title="UAT Checklist" icon={<Check size={18} />}>
+            <Section title="UAT Checks" icon={<Check size={18} />}>
               <div className="grid gap-4 lg:grid-cols-[260px_1fr]">
                 <div className="rounded-lg border border-line bg-paper p-4">
-                  <div className="text-xs font-semibold uppercase tracking-normal text-ink/55">Ready for personal testing</div>
+                  <div className="text-xs font-semibold uppercase tracking-normal text-ink/55">Progress</div>
                   <div className="mt-2 text-3xl font-black">
                     {completedUatItems}/{uatItems.length}
                   </div>
-                  <p className="mt-1 text-sm text-ink/65">Use the scenario buttons above to jump between stages, then complete the unfinished checks manually.</p>
+                  <div className="mt-1 text-sm text-ink/60">Manual test pass</div>
                 </div>
                 <div className="grid gap-2 md:grid-cols-2">
                   {uatItems.map((item) => (
@@ -1847,7 +2388,7 @@ export function TheScheduleApp() {
                       <AlertTriangle size={16} />
                       Availability missing
                     </div>
-                    <p className="mt-1 text-sm text-ink/70">
+                    <p className="mt-1 text-sm text-ink/60">
                       {missingAvailability.map((employee) => employee.name).join(", ")}
                     </p>
                   </div>
@@ -1858,7 +2399,7 @@ export function TheScheduleApp() {
                       <span className="text-sm font-bold">{entry.subject}</span>
                       <Badge tone={entry.status === "failed" ? "danger" : entry.status === "sent" ? "good" : "neutral"}>{entry.status}</Badge>
                     </div>
-                    <p className="mt-1 text-sm text-ink/65">
+                    <p className="mt-1 text-sm text-ink/60">
                       {entry.type.replaceAll("_", " ")}
                       {entry.userId ? ` - ${nameFor(entry.userId)}` : ""}
                     </p>
@@ -1870,7 +2411,7 @@ export function TheScheduleApp() {
                       <span className="text-sm font-bold">{entry.action.replaceAll("_", " ")}</span>
                       <span className="text-xs text-ink/55">{new Date(entry.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span>
                     </div>
-                    <p className="mt-1 text-sm text-ink/65">{entry.summary}</p>
+                    <p className="mt-1 line-clamp-2 text-sm text-ink/60">{entry.summary}</p>
                   </div>
                 ))}
               </div>
@@ -1880,9 +2421,12 @@ export function TheScheduleApp() {
 
         {activeTab === "employees" && mode === "manager" && (
           <Section title="Employees" icon={<Users size={18} />}>
-            <div className="mb-4 grid gap-3 rounded-lg border border-line p-4 lg:grid-cols-[1fr_1fr_auto]">
-              <Field label="Name">
-                <input className={inputBase} value={newEmployee.name} onChange={(event) => setNewEmployee({ ...newEmployee, name: event.target.value })} />
+            <div className="mb-4 grid gap-3 rounded-lg border border-line p-4 lg:grid-cols-[1fr_1fr_1.4fr_auto]">
+              <Field label="First name">
+                <input className={inputBase} value={newEmployee.firstName} onChange={(event) => setNewEmployee({ ...newEmployee, firstName: event.target.value })} />
+              </Field>
+              <Field label="Last name">
+                <input className={inputBase} value={newEmployee.lastName} onChange={(event) => setNewEmployee({ ...newEmployee, lastName: event.target.value })} />
               </Field>
               <Field label="Approved Gmail">
                 <input className={inputBase} type="email" value={newEmployee.email} onChange={(event) => setNewEmployee({ ...newEmployee, email: event.target.value })} />
@@ -1895,26 +2439,76 @@ export function TheScheduleApp() {
               </div>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[620px] border-separate border-spacing-0 text-left text-sm">
+              <table className="w-full min-w-[860px] border-separate border-spacing-0 text-left text-sm">
                 <thead>
                   <tr className="text-xs uppercase tracking-normal text-ink/55">
-                    <th className="border-b border-line pb-2">Name</th>
+                    <th className="border-b border-line pb-2">First</th>
+                    <th className="border-b border-line pb-2">Last</th>
                     <th className="border-b border-line pb-2">Approved Gmail</th>
                     <th className="border-b border-line pb-2">Access</th>
                     <th className="border-b border-line pb-2">Status</th>
+                    <th className="border-b border-line pb-2 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {people.map((employee) => (
-                    <tr key={employee.id}>
-                      <td className="border-b border-line py-3 font-semibold">{employee.name}</td>
-                      <td className="border-b border-line py-3">{employee.email}</td>
-                      <td className="border-b border-line py-3 capitalize">{employee.role}</td>
-                      <td className="border-b border-line py-3">
-                        <Badge tone={employee.active ? "good" : "neutral"}>{employee.active ? "Active" : "Inactive"}</Badge>
-                      </td>
-                    </tr>
-                  ))}
+                  {people.map((employee) => {
+                    const parts = employeeNameParts(employee.name);
+                    const status = inviteStatusFor(employee);
+                    const isEditing = editingEmployeeId === employee.id;
+
+                    return (
+                      <tr key={employee.id}>
+                        <td className="border-b border-line py-3 pr-3 font-semibold">
+                          {isEditing ? (
+                            <input className={inputBase} value={employeeEdit.firstName} onChange={(event) => setEmployeeEdit({ ...employeeEdit, firstName: event.target.value })} />
+                          ) : (
+                            parts.firstName
+                          )}
+                        </td>
+                        <td className="border-b border-line py-3 pr-3">
+                          {isEditing ? (
+                            <input className={inputBase} value={employeeEdit.lastName} onChange={(event) => setEmployeeEdit({ ...employeeEdit, lastName: event.target.value })} />
+                          ) : (
+                            parts.lastName || "-"
+                          )}
+                        </td>
+                        <td className="border-b border-line py-3 pr-3">
+                          {isEditing ? (
+                            <input className={inputBase} type="email" value={employeeEdit.email} onChange={(event) => setEmployeeEdit({ ...employeeEdit, email: event.target.value })} />
+                          ) : (
+                            employee.email
+                          )}
+                        </td>
+                        <td className="border-b border-line py-3 capitalize">{employee.role}</td>
+                        <td className="border-b border-line py-3">
+                          <Badge tone={status === "active" ? "good" : status === "invited" ? "warn" : "neutral"}>
+                            {status === "active" ? "Active" : status === "invited" ? "Invited" : "Inactive"}
+                          </Badge>
+                        </td>
+                        <td className="border-b border-line py-3">
+                          <div className="flex justify-end gap-2">
+                            {isEditing ? (
+                              <>
+                                <Button onClick={() => saveEmployeeEdit(employee.id)}>
+                                  <Check size={16} />
+                                  Save
+                                </Button>
+                                <Button variant="secondary" onClick={cancelEditEmployee}>
+                                  <X size={16} />
+                                  Cancel
+                                </Button>
+                              </>
+                            ) : (
+                              <Button variant="secondary" onClick={() => beginEditEmployee(employee)}>
+                                <Settings size={16} />
+                                Edit
+                              </Button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -1926,6 +2520,7 @@ export function TheScheduleApp() {
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               {activeEmployees.map((employee) => {
                 const submission = availability.find((item) => item.userId === employee.id);
+                const inviteStatus = inviteStatusFor(employee);
                 return (
                   <div key={employee.id} className="rounded-lg border border-line p-4">
                     <div className="flex items-center justify-between gap-2">
@@ -1933,7 +2528,9 @@ export function TheScheduleApp() {
                         <div className="font-bold">{employee.name}</div>
                         <div className="text-sm text-ink/60">{employee.email}</div>
                       </div>
-                      <Badge tone={submission?.submittedAt ? "good" : "warn"}>{submission?.submittedAt ? "Submitted" : "Missing"}</Badge>
+                      <Badge tone={inviteStatus !== "active" ? "neutral" : submission?.submittedAt ? "good" : "warn"}>
+                        {inviteStatus !== "active" ? "Invited" : submission?.submittedAt ? "Submitted" : "Missing"}
+                      </Badge>
                     </div>
                     <div className="mt-3 grid gap-2">
                       {submission?.submittedAt && submission.unavailable.length === 0 && (
@@ -1961,15 +2558,21 @@ export function TheScheduleApp() {
             <div className="grid gap-3 md:grid-cols-4">
               <Metric label="Unassigned" value={String(unassignedShifts.length)} detail={`${shifts.length} total shifts`} tone={unassignedShifts.length ? "warn" : "good"} />
               <Metric label="Assigned" value={String(shifts.length - unassignedShifts.length)} detail="Ready for publishing" />
-              <Metric label="Availability" value={`${submittedIds.size}/${activeEmployees.length}`} detail={`${missingAvailability.length} missing`} tone={missingAvailability.length ? "warn" : "good"} />
+              <Metric
+                label="Availability"
+                value={`${schedulableSubmittedIds.size}/${schedulableEmployees.length}`}
+                detail={`${missingAvailability.length} missing`}
+                tone={missingAvailability.length ? "warn" : "good"}
+              />
               <Metric label="Selected" value={selectedShift ? shortDayLabel(selectedShift.date) : "-"} detail={selectedShift ? `${formatTime(selectedShift.startTime)}-${formatTime(selectedShift.endTime)}` : "Choose a shift"} />
             </div>
             <Section title="Publish Readiness" icon={<ShieldCheck size={18} />}>
-              <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+              <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
                 {[
-                  { label: "Shifts generated", done: shifts.length > 0, detail: `${shifts.length} shifts` },
+                  { label: "Shift blocks ready", done: shifts.length > 0, detail: `${shifts.length} shifts` },
                   { label: "Availability collected", done: missingAvailability.length === 0, detail: `${missingAvailability.length} missing` },
                   { label: "All shifts assigned", done: unassignedShifts.length === 0 && shifts.length > 0, detail: `${unassignedShifts.length} unassigned` },
+                  { label: "Invites accepted", done: assignedPendingInviteShifts.length === 0, detail: `${assignedPendingInviteShifts.length} pending` },
                   { label: "No availability conflicts", done: assignedConflictShifts.length === 0, detail: `${assignedConflictShifts.length} conflicts` }
                 ].map((item) => (
                   <div key={item.label} className={cx("rounded-lg border p-3", item.done ? "border-approve/30 bg-approve/10" : "border-warn bg-warn/10")}>
@@ -2028,7 +2631,7 @@ export function TheScheduleApp() {
                     <div className="rounded-lg border border-line p-4">
                       <div className="font-black">Employee notifications</div>
                       <div className="mt-3 grid gap-2">
-                        {activeEmployees.map((employee) => {
+                        {schedulableEmployees.map((employee) => {
                           const employeeShifts = shifts.filter((shift) => shift.employeeId === employee.id);
                           return (
                             <div key={employee.id} className="flex items-center justify-between gap-3 rounded-md bg-paper p-3 text-sm">
@@ -2064,8 +2667,13 @@ export function TheScheduleApp() {
                 title="Schedule Builder"
                 calendarWeeks={calendarWeeks}
                 availability={availability}
+                hours={finalHours}
+                assignablePeople={schedulableEmployees}
                 showAssignments
                 onRemove={removeShift}
+                onUpdateShift={updateShift}
+                onAddShiftForDate={addShiftForDate}
+                selectedShift={selectedShift}
                 selectedShiftId={selectedShiftId}
                 onSelectShift={setSelectedShiftId}
                 showOnlyUnassigned={showOnlyUnassigned}
@@ -2075,9 +2683,13 @@ export function TheScheduleApp() {
                       <AlertTriangle size={16} />
                       Unassigned
                     </Button>
-                    <Button variant="secondary" onClick={generateDraft}>
+                    <Button variant="secondary" onClick={generateDraft} disabled={!canAutoAssignSchedule}>
                       <RefreshCw size={16} />
-                      Generate
+                      Auto assign
+                    </Button>
+                    <Button variant="danger" onClick={clearAllShifts} disabled={shifts.length === 0}>
+                      <X size={16} />
+                      Clear
                     </Button>
                     <Button onClick={publishSchedule} disabled={period.status === "published"}>
                       <Send size={16} />
@@ -2086,71 +2698,13 @@ export function TheScheduleApp() {
                   </div>
                 }
               />
-
-              <AssignmentPanel
-                people={people}
-                shift={selectedShift}
-                availability={availability}
-                hours={finalHours}
-                onAssign={(employeeId) => selectedShift && assignShift(selectedShift.id, employeeId)}
-                onQuickAssign={quickAssignSelectedShift}
-                onClear={() => selectedShift && assignShift(selectedShift.id, "")}
-              />
-
-              <Section title="Custom Shift" icon={<Plus size={18} />}>
-                <div className="grid gap-3 md:grid-cols-4">
-                  <Field label="Date">
-                    <select className={inputBase} value={customShift.date} onChange={(event) => setCustomShift({ ...customShift, date: event.target.value })}>
-                      {dates.map((date) => (
-                        <option key={date} value={date}>
-                          {getDayName(date)}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-                  <Field label="Start">
-                    <input className={inputBase} type="time" value={customShift.startTime} onChange={(event) => setCustomShift({ ...customShift, startTime: event.target.value })} />
-                  </Field>
-                  <Field label="End">
-                    <input className={inputBase} type="time" value={customShift.endTime} onChange={(event) => setCustomShift({ ...customShift, endTime: event.target.value })} />
-                  </Field>
-                  <div className="flex items-end">
-                    <Button className="w-full" onClick={addCustomShift}>
-                      <Plus size={16} />
-                      Add
-                    </Button>
-                  </div>
-                </div>
-              </Section>
             </div>
-
-            <Section title="Hours" icon={<Clock size={18} />}>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-                {finalHours
-                  .filter((item) => item.shifts > 0 || people.find((employee) => employee.id === item.employeeId)?.active)
-                  .map((item) => (
-                    <div key={item.employeeId} className="rounded-lg border border-line bg-paper p-4">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-bold">{item.name}</span>
-                        <span className="text-lg font-black">{item.hours.toFixed(1)}h</span>
-                      </div>
-                      <div className="mt-2 flex items-center justify-between text-sm text-ink/65">
-                        <span>{item.shifts} shifts</span>
-                        <Badge tone={Math.abs(item.averageDelta) > 5 ? "warn" : "neutral"}>
-                          {item.averageDelta >= 0 ? "+" : ""}
-                          {item.averageDelta.toFixed(1)} vs avg
-                        </Badge>
-                      </div>
-                    </div>
-                  ))}
-              </div>
-            </Section>
           </div>
         )}
 
         {activeTab === "my-shifts" && mode === "employee" && (
           <Section title="My Shifts" icon={<Clock size={18} />}>
-            <ShiftList shifts={myShifts} onRequestCoverage={requestCoverage} />
+            <ShiftList shifts={myShifts} coverageRequests={coverage} onRequestCoverage={requestCoverage} />
           </Section>
         )}
 
@@ -2165,15 +2719,15 @@ export function TheScheduleApp() {
                   )}
                 >
                   <div className="font-black">
-                    {activeEmployeeNeedsAvailability ? "Build your unavailable-days list before submitting." : "Availability has been submitted."}
+                    {!activeInviteAccepted ? "Invite not accepted." : activeEmployeeNeedsAvailability ? "Add unavailable days." : "Submitted."}
                   </div>
-                  <p className="mt-1 text-ink/70">
-                    Adding a day below does not submit it yet. Submit when the list is complete, or submit with no unavailable days.
-                  </p>
+                  <div className="mt-1 text-ink/60">
+                    {!activeInviteAccepted ? "Accept the invite before submitting." : canChangeAvailability ? "Add days first, then submit." : "Deadline passed."}
+                  </div>
                   {activeSubmission?.submittedAt && (
-                    <Button className="mt-3" variant="secondary" onClick={beginEditAvailability}>
+                    <Button className="mt-3" variant="secondary" onClick={beginEditAvailability} disabled={!canChangeAvailability}>
                       <RefreshCw size={16} />
-                      Edit submission
+                      Unsubmit
                     </Button>
                   )}
                 </div>
@@ -2200,7 +2754,7 @@ export function TheScheduleApp() {
                 {availabilityForm.unavailableType === "shift_template" && (
                   <Field label="Shift template">
                     <select className={inputBase} value={availabilityForm.shiftTemplateId} onChange={(event) => setAvailabilityForm({ ...availabilityForm, shiftTemplateId: event.target.value })}>
-                      {shiftTemplates.map((template) => (
+                      {availableShiftTemplates.map((template) => (
                         <option key={template.id} value={template.id}>
                           {template.name} {formatTime(template.startTime)}-{formatTime(template.endTime)}
                         </option>
@@ -2221,17 +2775,13 @@ export function TheScheduleApp() {
                 <Field label="Note">
                   <input className={inputBase} value={availabilityForm.note} onChange={(event) => setAvailabilityForm({ ...availabilityForm, note: event.target.value })} />
                 </Field>
-                <Button variant="secondary" onClick={addAvailabilityDraftEntry}>
+                <Button onClick={addAvailabilityDraftEntry} disabled={!activeInviteAccepted || !canChangeAvailability}>
                   <Plus size={16} />
-                  Add unavailable day
+                  1. Add unavailable day
                 </Button>
-                <Button onClick={submitAvailability}>
+                <Button variant="secondary" onClick={submitAvailability} disabled={!activeInviteAccepted || !canChangeAvailability}>
                   <Check size={16} />
-                  Submit availability
-                </Button>
-                <Button variant="ghost" onClick={submitNoUnavailableDays}>
-                  <Check size={16} />
-                  Submit no unavailable days
+                  {activeAvailabilityDraft.length === 0 ? "2. Submit no days" : "2. Submit draft"}
                 </Button>
               </div>
               <div className="grid content-start gap-4">
@@ -2243,7 +2793,7 @@ export function TheScheduleApp() {
                   <div className="mt-3 grid gap-2">
                     {activeAvailabilityDraft.length === 0 && (
                       <div className="rounded-md border border-dashed border-line p-3 text-sm text-ink/55">
-                        No draft days added yet.
+                        Submit no days if you are available for the next two weeks.
                       </div>
                     )}
                     {activeAvailabilityDraft.map((entry) => (
@@ -2255,9 +2805,17 @@ export function TheScheduleApp() {
                 <div className="rounded-lg border border-line p-4">
                   <div className="flex items-center justify-between gap-2">
                     <h3 className="font-black">Submitted availability</h3>
-                    <Badge tone={activeSubmission?.submittedAt ? "good" : "warn"}>
-                      {activeSubmission?.submittedAt ? "Submitted" : "Not submitted"}
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge tone={activeSubmission?.submittedAt ? "good" : "warn"}>
+                        {activeSubmission?.submittedAt ? "Submitted" : "Not submitted"}
+                      </Badge>
+                      {activeSubmission?.submittedAt && (
+                        <Button variant="ghost" onClick={unsubmitAvailability} disabled={!activeInviteAccepted || !canChangeAvailability}>
+                          <RefreshCw size={16} />
+                          Unsubmit
+                        </Button>
+                      )}
+                    </div>
                   </div>
                   <div className="mt-3 grid gap-2">
                     {!activeSubmission?.submittedAt && (
@@ -2286,27 +2844,47 @@ export function TheScheduleApp() {
           <div className="grid gap-4 lg:grid-cols-2">
             <Section title="Coverage Requests" icon={<Repeat2 size={18} />}>
               <div className="grid gap-3">
+                {openCoverage.length === 0 && (
+                  <div className="rounded-lg border border-dashed border-line p-6 text-sm font-semibold text-ink/55">
+                    No open coverage requests.
+                  </div>
+                )}
                 {openCoverage.map((request) => {
                   const shift = shifts.find((item) => item.id === request.shiftId);
                   if (!shift) return null;
                   const isMine = shift.employeeId === activeEmployee.id;
                   const canOffer = mode === "employee" && !isMine && request.requestedById !== activeEmployee.id && request.status === "open";
+                  const offerBlockReason = canOffer ? coverageBlockReason(request, activeEmployee.id) : "";
+                  const claimant = request.claimedById ? nameFor(request.claimedById) : "No one yet";
 
                   return (
                     <div key={request.id} className="rounded-lg border border-line p-4">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div>
-                          <div className="font-bold">{getDayName(shift.date)}</div>
+                          <div className="font-bold">
+                            {mode === "manager"
+                              ? `${nameFor(request.requestedById)} is asking for this shift to be covered`
+                              : getDayName(shift.date)}
+                          </div>
                           <div className="text-sm text-ink/65">
-                            {formatTime(shift.startTime)}-{formatTime(shift.endTime)} - {nameFor(request.requestedById)}
+                            {getDayName(shift.date)} {formatTime(shift.startTime)}-{formatTime(shift.endTime)}
                           </div>
                         </div>
                         <Badge tone={request.status === "offered" ? "warn" : "neutral"}>{request.status}</Badge>
                       </div>
-                      <p className="mt-2 text-sm text-ink/65">{request.reason}</p>
+                      <div className="mt-3 grid gap-2 rounded-md bg-paper p-3 text-sm text-ink/70">
+                        <div>
+                          <span className="font-bold text-ink">{nameFor(request.requestedById)}</span> is asking for coverage.
+                        </div>
+                        <div>
+                          <span className="font-bold text-ink">{claimant}</span>{request.claimedById ? " is requesting to cover it." : " has offered to cover it."}
+                        </div>
+                        <div>{request.reason}</div>
+                      </div>
+                      {offerBlockReason && <p className="mt-2 text-sm font-semibold text-warn">{offerBlockReason}</p>}
                       <div className="mt-3 flex flex-wrap gap-2">
                         {canOffer && (
-                          <Button variant="secondary" onClick={() => offerCoverage(request.id)}>
+                          <Button variant="secondary" onClick={() => offerCoverage(request.id)} disabled={Boolean(offerBlockReason)}>
                             <Check size={16} />
                             Offer
                           </Button>
@@ -2348,17 +2926,23 @@ export function TheScheduleApp() {
                       <option value="">Select shift</option>
                       {shifts
                         .filter((shift) => shift.employeeId && shift.employeeId !== activeEmployee.id)
-                        .map((shift) => (
-                          <option key={shift.id} value={shift.id}>
-                            {nameFor(shift.employeeId)} - {getDayName(shift.date)} {formatTime(shift.startTime)}
-                          </option>
-                        ))}
+                        .map((shift) => {
+                          const requesterShift = shifts.find((item) => item.id === swapForm.requesterShiftId);
+                          const blocked = requesterShift ? swapBlockReason(requesterShift, shift) : "";
+                          return (
+                            <option key={shift.id} value={shift.id} disabled={Boolean(blocked)}>
+                              {nameFor(shift.employeeId)} - {getDayName(shift.date)} {formatTime(shift.startTime)}
+                              {blocked ? ` (${blocked})` : ""}
+                            </option>
+                          );
+                        })}
                     </select>
                   </Field>
                   <Field label="Reason">
                     <input className={inputBase} value={swapForm.reason} onChange={(event) => setSwapForm({ ...swapForm, reason: event.target.value })} />
                   </Field>
-                  <Button onClick={requestSwap}>
+                  {currentSwapBlockReason() && <div className="rounded-md border border-warn bg-warn/10 p-3 text-sm font-semibold text-warn">{currentSwapBlockReason()}</div>}
+                  <Button onClick={requestSwap} disabled={!swapForm.requesterShiftId || !swapForm.targetShiftId || Boolean(currentSwapBlockReason())}>
                     <Repeat2 size={16} />
                     Request swap
                   </Button>
@@ -2366,10 +2950,16 @@ export function TheScheduleApp() {
               )}
 
               <div className="grid gap-3">
+                {swaps.length === 0 && (
+                  <div className="rounded-lg border border-dashed border-line p-6 text-sm font-semibold text-ink/55">
+                    No shift swaps yet.
+                  </div>
+                )}
                 {swaps.map((request) => {
                   const requesterShift = shifts.find((shift) => shift.id === request.requesterShiftId);
                   const targetShift = shifts.find((shift) => shift.id === request.targetShiftId);
                   const targetCanRespond = mode === "employee" && request.targetEmployeeId === activeEmployee.id && request.status === "pending_employee_response";
+                  const swapBlock = request.status === "pending_employee_response" || request.status === "pending_manager_approval" ? swapApprovalBlockReason(request) : "";
                   return (
                     <div key={request.id} className="rounded-lg border border-line p-4">
                       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -2381,14 +2971,19 @@ export function TheScheduleApp() {
                         </Badge>
                       </div>
                       <div className="mt-2 text-sm text-ink/65">
-                        {requesterShift ? `${getDayName(requesterShift.date)} ${formatTime(requesterShift.startTime)}` : "Requester shift"} for{" "}
-                        {targetShift ? `${getDayName(targetShift.date)} ${formatTime(targetShift.startTime)}` : "open swap"}
+                        {nameFor(request.requesterId)} gives{" "}
+                        {requesterShift ? `${getDayName(requesterShift.date)} ${formatTime(requesterShift.startTime)}-${formatTime(requesterShift.endTime)}` : "their shift"}
+                        {" for "}
+                        {nameFor(request.targetEmployeeId)}
+                        {"'s "}
+                        {targetShift ? `${getDayName(targetShift.date)} ${formatTime(targetShift.startTime)}-${formatTime(targetShift.endTime)}` : "shift"}
                       </div>
                       <p className="mt-1 text-sm text-ink/65">{request.reason}</p>
+                      {swapBlock && <p className="mt-2 text-sm font-semibold text-warn">{swapBlock}</p>}
                       <div className="mt-3 flex flex-wrap gap-2">
                         {targetCanRespond && (
                           <>
-                            <Button onClick={() => acceptSwap(request.id, true)}>
+                            <Button onClick={() => acceptSwap(request.id, true)} disabled={Boolean(swapBlock)}>
                               <Check size={16} />
                               Accept
                             </Button>
@@ -2400,7 +2995,7 @@ export function TheScheduleApp() {
                         )}
                         {mode === "manager" && request.status === "pending_manager_approval" && (
                           <>
-                            <Button onClick={() => approveSwap(request.id, true)}>
+                            <Button onClick={() => approveSwap(request.id, true)} disabled={Boolean(swapBlock)}>
                               <Check size={16} />
                               Approve
                             </Button>
@@ -2501,9 +3096,7 @@ export function TheScheduleApp() {
             >
               <div className="grid gap-3">
                 {uatIssues.length === 0 && (
-                  <div className="rounded-lg border border-dashed border-line p-6 text-sm font-semibold text-ink/55">
-                    No UAT issues logged yet. Use Report issue while testing any manager or employee flow.
-                  </div>
+                  <div className="rounded-lg border border-dashed border-line p-6 text-sm font-semibold text-ink/55">No issues logged.</div>
                 )}
                 {uatIssues.map((issue) => (
                   <div key={issue.id} className="rounded-lg border border-line p-4">
@@ -2541,7 +3134,7 @@ export function TheScheduleApp() {
 
         {activeTab === "notifications" && mode === "manager" && (
           <div className="grid gap-4">
-            <Section title="Notification Preview Center" icon={<Mail size={18} />}>
+            <Section title="Email Previews" icon={<Mail size={18} />}>
               <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
                 {notificationPreviews.map((preview) => (
                   <div key={preview.type} className="rounded-lg border border-line p-4">
@@ -2553,17 +3146,15 @@ export function TheScheduleApp() {
                       </div>
                       <Mail className="shrink-0 text-mall" size={20} />
                     </div>
-                    <p className="mt-3 text-sm text-ink/70">{preview.body}</p>
+                    <p className="mt-3 text-sm text-ink/60">{preview.body}</p>
                   </div>
                 ))}
               </div>
             </Section>
-            <Section title="Notification Log" icon={<ShieldCheck size={18} />}>
+            <Section title="Email Log" icon={<ShieldCheck size={18} />}>
               <div className="grid gap-3">
                 {notifications.length === 0 && (
-                  <div className="rounded-lg border border-dashed border-line p-6 text-sm font-semibold text-ink/55">
-                    No notifications queued yet.
-                  </div>
+                  <div className="rounded-lg border border-dashed border-line p-6 text-sm font-semibold text-ink/55">No email activity yet.</div>
                 )}
                 {notifications.map((entry) => (
                   <div key={entry.id} className="rounded-lg border border-line p-4">
@@ -2601,7 +3192,7 @@ export function TheScheduleApp() {
                 ))}
               </div>
             </Section>
-            <Section title="Default Shift Templates" icon={<Clock size={18} />}>
+            <Section title="Shift Templates" icon={<Clock size={18} />}>
               <div className="grid gap-2">
                 {shiftTemplates.map((template) => (
                   <div key={template.id} className="grid grid-cols-[1fr_auto] items-center gap-3 rounded-lg border border-line p-3">
@@ -2616,14 +3207,11 @@ export function TheScheduleApp() {
                 ))}
               </div>
             </Section>
-            <Section title="Auth & Notifications" icon={<ShieldCheck size={18} />}>
+            <Section title="Access & Email" icon={<ShieldCheck size={18} />}>
               <div className="grid gap-3">
                 <div className="rounded-lg border border-line p-3">
                   <div className="text-xs font-semibold uppercase tracking-normal text-ink/55">Approved access</div>
                   <div className="mt-2 font-black">{people.filter((person) => person.active).length} active Gmail accounts</div>
-                  <p className="mt-1 text-sm text-ink/65">
-                    Google sign-in checks the active store membership before allowing access.
-                  </p>
                   <Link className={cx(buttonBase, "mt-3 border-line bg-white text-ink hover:bg-paper")} href="/api/auth/signin">
                     <ShieldCheck size={16} />
                     Google sign-in
@@ -2632,9 +3220,6 @@ export function TheScheduleApp() {
                 <div className="rounded-lg border border-line p-3">
                   <div className="text-xs font-semibold uppercase tracking-normal text-ink/55">Test notification</div>
                   <div className="mt-2 font-black">{currentIdentity?.email ?? "No recipient"}</div>
-                  <p className="mt-1 text-sm text-ink/65">
-                    Sends through Resend when configured; otherwise logs as queued.
-                  </p>
                   <Button className="mt-3 w-full" onClick={() => void sendTestEmail()} disabled={testEmailStatus === "sending"}>
                     <Mail size={16} />
                     {testEmailStatus === "sending" ? "Sending" : "Send test email"}
@@ -2656,7 +3241,8 @@ export function TheScheduleApp() {
                 className={cx(
                   "relative grid min-h-14 place-items-center rounded-md px-1 text-[11px] font-bold leading-tight",
                   activeTab === tab.id ? "bg-mall text-white" : "bg-paper text-ink",
-                  tab.id === "submit" && activeEmployeeNeedsAvailability && activeTab !== tab.id && "text-warn"
+                  tab.id === "submit" && activeEmployeeNeedsAvailability && activeTab !== tab.id && "text-warn",
+                  tab.id === "requests" && activeEmployeeRequestCount > 0 && activeTab !== tab.id && "text-warn"
                 )}
                 onClick={() => setActiveTab(tab.id)}
                 type="button"
@@ -2671,6 +3257,16 @@ export function TheScheduleApp() {
                     )}
                   >
                     !
+                  </span>
+                )}
+                {tab.id === "requests" && activeEmployeeRequestCount > 0 && (
+                  <span
+                    className={cx(
+                      "absolute right-1 top-1 grid min-w-4 place-items-center rounded-full px-1 text-[10px]",
+                      activeTab === tab.id ? "bg-white text-warn" : "bg-warn text-white"
+                    )}
+                  >
+                    {activeEmployeeRequestCount}
                   </span>
                 )}
               </button>
@@ -2688,8 +3284,13 @@ function ScheduleGrid({
   action,
   calendarWeeks,
   availability,
+  hours = [],
+  assignablePeople,
   showAssignments,
   onRemove,
+  onUpdateShift,
+  onAddShiftForDate,
+  selectedShift,
   selectedShiftId,
   onSelectShift,
   showOnlyUnassigned = false
@@ -2699,32 +3300,125 @@ function ScheduleGrid({
   action?: React.ReactNode;
   calendarWeeks: ReturnType<typeof buildCalendarWeeks>;
   availability: AvailabilitySubmission[];
+  hours?: ReturnType<typeof calculateHours>;
+  assignablePeople?: Employee[];
   showAssignments?: boolean;
   onRemove?: (shiftId: string) => void;
+  onUpdateShift?: (shiftId: string, updates: Partial<Pick<Shift, "date" | "startTime" | "endTime" | "employeeId">>) => void;
+  onAddShiftForDate?: (date: string) => void;
+  selectedShift?: Shift | null;
   selectedShiftId?: string | null;
   onSelectShift?: (shiftId: string) => void;
   showOnlyUnassigned?: boolean;
 }) {
-  const weekDayLabels = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const weekDayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const activePeople = (assignablePeople ?? people).filter((employee) => employee.active);
+  const calendarDates = calendarWeeks.flatMap((week) => week).filter((day) => day.inPeriod).map((day) => day.date);
+  const exportRef = useRef<HTMLElement | null>(null);
+
+  function employeeStats(employeeId?: string | null) {
+    return hours.find((item) => item.employeeId === employeeId);
+  }
+
+  function loadTone(employeeId?: string | null) {
+    const stats = employeeStats(employeeId);
+    if (!employeeId || !stats) return "border-line bg-paper text-ink";
+    if (stats.averageDelta > 4) return "border-warn bg-warn/10 text-ink";
+    if (stats.averageDelta < -4) return "border-mall bg-mall/10 text-ink";
+    return "border-approve/40 bg-approve/10 text-ink";
+  }
 
   return (
     <Section
       title={title}
       icon={<CalendarDays size={18} />}
+      captureRef={exportRef}
       action={
         action ?? (
-          <Button variant="secondary" onClick={() => window.print()}>
-            <Printer size={16} />
-            Print
-          </Button>
+          <ScheduleExportButtons targetRef={exportRef} title={`${title} ${store.name} ${schedulePeriod.name}`} />
         )
       }
     >
+      {selectedShift && onUpdateShift && (
+        <div className="mb-3 grid gap-3 rounded-lg border border-line bg-paper p-3 xl:grid-cols-[0.85fr_1.15fr]">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Field label="Date">
+              <select
+                className={inputBase}
+                value={selectedShift.date}
+                onChange={(event) => onUpdateShift(selectedShift.id, { date: event.target.value })}
+              >
+                {calendarDates.map((date) => (
+                  <option key={date} value={date}>
+                    {getDayName(date)}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Start">
+              <input
+                className={inputBase}
+                type="time"
+                value={selectedShift.startTime}
+                onChange={(event) => onUpdateShift(selectedShift.id, { startTime: event.target.value })}
+              />
+            </Field>
+            <Field label="End">
+              <input
+                className={inputBase}
+                type="time"
+                value={selectedShift.endTime}
+                onChange={(event) => onUpdateShift(selectedShift.id, { endTime: event.target.value })}
+              />
+            </Field>
+          </div>
+          <div className="grid gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                className={cx(
+                  "rounded-md border px-3 py-2 text-left text-sm font-bold transition hover:border-mall",
+                  !selectedShift.employeeId ? "border-mall bg-mall text-white" : "border-line bg-white text-ink"
+                )}
+                onClick={() => onUpdateShift(selectedShift.id, { employeeId: "" })}
+                type="button"
+              >
+                Unassigned
+              </button>
+              {activePeople.map((employee) => {
+                const stats = employeeStats(employee.id);
+                const unavailable = isEmployeeUnavailable(employee.id, selectedShift, availability);
+                const assigned = selectedShift.employeeId === employee.id;
+                return (
+                  <button
+                    key={employee.id}
+                    className={cx(
+                      "rounded-md border px-3 py-2 text-left text-sm transition hover:border-mall",
+                      loadTone(employee.id),
+                      assigned && "ring-2 ring-mall/30",
+                      unavailable && "border-warn bg-warn/10"
+                    )}
+                    onClick={() => onUpdateShift(selectedShift.id, { employeeId: employee.id })}
+                    type="button"
+                  >
+                    <span className="block font-black leading-tight">{employee.name}</span>
+                    <span className="mt-0.5 block text-xs font-semibold text-ink/60">
+                      {(stats?.hours ?? 0).toFixed(1)}h / {stats?.shifts ?? 0} shifts
+                      {stats ? ` / ${stats.averageDelta >= 0 ? "+" : ""}${stats.averageDelta.toFixed(1)}` : ""}
+                      {unavailable ? " / unavailable" : ""}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="-mx-2 overflow-x-auto px-2 pb-2">
-        <div className="min-w-[1050px] overflow-hidden rounded-lg border border-line bg-white">
+        <div className="min-w-[920px] overflow-hidden rounded-lg border border-line bg-white">
           <div className="grid grid-cols-7 border-b border-line bg-mall text-white">
             {weekDayLabels.map((label) => (
-              <div key={label} className="px-4 py-3 text-sm font-black">
+              <div key={label} className="px-3 py-2 text-xs font-black uppercase tracking-normal">
                 {label}
               </div>
             ))}
@@ -2733,33 +3427,33 @@ function ScheduleGrid({
             {calendarWeeks.map((week, weekIndex) => (
               <div key={`week-${weekIndex}`} className="grid grid-cols-7 border-b border-line last:border-b-0">
                 {week.map(({ date, inPeriod, shifts }) => {
-                  const hours = storeHours.find((entry) => entry.dayOfWeek === parseLocalDate(date).getDay());
+                  const dayHours = storeHours.find((entry) => entry.dayOfWeek === parseLocalDate(date).getDay());
                   const visibleShifts = showOnlyUnassigned ? shifts.filter((shift) => !shift.employeeId) : shifts;
 
                   return (
                     <div
                       key={date}
                       className={cx(
-                        "min-h-[230px] border-r border-line p-3 last:border-r-0",
+                        "flex min-h-[160px] flex-col border-r border-line p-2 last:border-r-0",
                         inPeriod ? "bg-white" : "bg-paper/60 text-ink/35"
                       )}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div>
-                          <div className={cx("text-lg font-black leading-tight", !inPeriod && "text-ink/35")}>
+                          <div className={cx("text-sm font-black leading-tight", !inPeriod && "text-ink/35")}>
                             {shortDayLabel(date)}
                           </div>
                           <div className={cx("mt-1 text-xs font-semibold", inPeriod ? "text-ink/55" : "text-ink/30")}>
-                            {hours && inPeriod ? `${formatTime(hours.openTime)}-${formatTime(hours.closeTime)}` : weekdayLong(date)}
+                            {dayHours && inPeriod ? `${formatTime(dayHours.openTime)}-${formatTime(dayHours.closeTime)}` : weekdayLong(date)}
                           </div>
                         </div>
                         {inPeriod && shifts.length > 0 && <Badge>{showOnlyUnassigned ? `${visibleShifts.length}/${shifts.length}` : shifts.length}</Badge>}
                       </div>
 
-                      <div className="mt-3 grid gap-2">
+                      <div className="mt-2 grid flex-1 content-start gap-1.5">
                         {!inPeriod && <div className="h-16" />}
                         {inPeriod && visibleShifts.length === 0 && (
-                          <div className="rounded-md border border-dashed border-line bg-paper/70 p-3 text-sm font-semibold text-ink/45">
+                          <div className="rounded-md border border-dashed border-line bg-paper/70 p-2 text-xs font-semibold text-ink/45">
                             {shifts.length === 0 ? "No shifts" : "No unassigned shifts"}
                           </div>
                         )}
@@ -2772,8 +3466,10 @@ function ScheduleGrid({
                               <div
                                 key={shift.id}
                                 className={cx(
-                                  "cursor-pointer rounded-md border bg-paper p-2.5 shadow-sm transition hover:border-mall hover:bg-white",
-                                  isSelected ? "border-mall ring-2 ring-mall/20" : "border-line"
+                                  "cursor-pointer rounded-md border p-2 transition hover:border-mall hover:bg-white",
+                                  loadTone(shift.employeeId),
+                                  isSelected ? "border-mall ring-2 ring-mall/20" : "border-line",
+                                  assignedUnavailable && "border-warn bg-warn/10"
                                 )}
                                 onClick={() => onSelectShift?.(shift.id)}
                                 onKeyDown={(event) => {
@@ -2781,14 +3477,15 @@ function ScheduleGrid({
                                 }}
                                 role={onSelectShift ? "button" : undefined}
                                 tabIndex={onSelectShift ? 0 : undefined}
+                                title="Edit shift"
                               >
                                 <div className="flex items-start justify-between gap-2">
                                   <div className="min-w-0">
-                                    <div className="text-sm font-black leading-tight">
+                                    <div className="text-xs font-black leading-tight">
                                       {formatTime(shift.startTime)}-{formatTime(shift.endTime)}
                                     </div>
-                                    <div className="mt-1 text-xs font-semibold text-ink/55">
-                                      {shiftDurationHours(shift).toFixed(1)}h
+                                    <div className="mt-0.5 truncate text-xs font-semibold text-ink/60">
+                                      {assignedEmployee?.name ?? "Unassigned"} / {shiftDurationHours(shift).toFixed(1)}h
                                     </div>
                                   </div>
                                   {onRemove && (
@@ -2805,186 +3502,32 @@ function ScheduleGrid({
                                   )}
                                 </div>
                                 {showAssignments && (
-                                  <div className="mt-2 grid gap-2">
-                                    <div
-                                      className={cx(
-                                        "rounded-md border bg-white px-2 py-2",
-                                        assignedUnavailable ? "border-warn" : "border-line"
-                                      )}
-                                    >
-                                      <div className="text-sm font-bold leading-tight break-words">
-                                        {assignedEmployee?.name ?? "Unassigned"}
-                                      </div>
-                                      {assignedUnavailable && (
-                                        <div className="mt-1 flex items-center gap-1 text-xs font-semibold text-warn">
-                                          <AlertTriangle size={14} />
-                                          Conflict
-                                        </div>
-                                      )}
+                                  assignedUnavailable && (
+                                    <div className="mt-1 flex items-center gap-1 text-xs font-semibold text-warn">
+                                      <AlertTriangle size={13} />
+                                      Conflict
                                     </div>
-                                    {onSelectShift && (
-                                      <div className="text-xs font-semibold text-mall">
-                                        Click to assign
-                                      </div>
-                                    )}
-                                  </div>
+                                  )
                                 )}
                               </div>
                             );
                           })}
                       </div>
+                      {inPeriod && onAddShiftForDate && (
+                        <button
+                          className="mt-2 flex h-8 items-center justify-center gap-1 rounded-md border border-dashed border-line text-xs font-black text-ink/60 transition hover:border-mall hover:bg-mall/10 hover:text-mall"
+                          onClick={() => onAddShiftForDate(date)}
+                          type="button"
+                        >
+                          <Plus size={14} />
+                          Shift
+                        </button>
+                      )}
                     </div>
                   );
                 })}
               </div>
             ))}
-          </div>
-        </div>
-      </div>
-    </Section>
-  );
-}
-
-function AssignmentPanel({
-  people,
-  shift,
-  availability,
-  hours,
-  onAssign,
-  onQuickAssign,
-  onClear
-}: {
-  people: Employee[];
-  shift: Shift | null;
-  availability: AvailabilitySubmission[];
-  hours: ReturnType<typeof calculateHours>;
-  onAssign: (employeeId: string) => void;
-  onQuickAssign: () => void;
-  onClear: () => void;
-}) {
-  const employeesForAssignment = people.filter((employee) => employee.active);
-
-  if (!shift) {
-    return (
-      <Section title="Assign Shift" icon={<Users size={18} />}>
-        <div className="rounded-lg border border-dashed border-line p-6 text-sm font-semibold text-ink/55">
-          Select a shift on the calendar to assign an employee.
-        </div>
-      </Section>
-    );
-  }
-
-  const availableEmployees = employeesForAssignment.filter(
-    (employee) => employee.active && !availabilityStatusForShift(employee, shift, availability).unavailable
-  );
-  const unavailableEmployees = employeesForAssignment.filter(
-    (employee) => !employee.active || availabilityStatusForShift(employee, shift, availability).unavailable
-  );
-
-  function employeeHours(employeeId: string) {
-    return hours.find((item) => item.employeeId === employeeId);
-  }
-
-  return (
-    <Section
-      title="Assign Shift"
-      icon={<Users size={18} />}
-      action={
-        <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" onClick={onQuickAssign} disabled={availableEmployees.length === 0}>
-            <Check size={16} />
-            Quick assign
-          </Button>
-          <Button variant="ghost" onClick={onClear} disabled={!shift.employeeId}>
-            <X size={16} />
-            Clear
-          </Button>
-        </div>
-      }
-    >
-      <div className="grid gap-4 xl:grid-cols-[320px_1fr]">
-        <div className="rounded-lg border border-line bg-paper p-4">
-          <div className="text-xs font-semibold uppercase tracking-normal text-ink/55">Selected shift</div>
-          <div className="mt-2 text-xl font-black">{getDayName(shift.date)}</div>
-          <div className="mt-1 text-sm font-semibold text-ink/70">
-            {formatTime(shift.startTime)}-{formatTime(shift.endTime)} - {shiftDurationHours(shift).toFixed(1)}h
-          </div>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <Badge tone={shift.employeeId ? "good" : "warn"}>{shift.employeeId ? "Assigned" : "Unassigned"}</Badge>
-          </div>
-          <div className="mt-4 rounded-md bg-white p-3">
-            <div className="text-xs font-semibold uppercase tracking-normal text-ink/55">Current employee</div>
-            <div className="mt-1 font-black">{people.find((employee) => employee.id === shift.employeeId)?.name ?? "Unassigned"}</div>
-          </div>
-        </div>
-
-        <div className="grid gap-4 lg:grid-cols-2">
-          <div className="rounded-lg border border-line p-4">
-            <div className="flex items-center justify-between gap-2">
-              <h3 className="font-black">Available</h3>
-              <Badge tone={availableEmployees.length ? "good" : "warn"}>{availableEmployees.length}</Badge>
-            </div>
-            <div className="mt-3 grid gap-2">
-              {availableEmployees.length === 0 && (
-                <div className="rounded-md border border-dashed border-line p-3 text-sm text-ink/55">
-                  No available employees. Overrides are enabled below.
-                </div>
-              )}
-              {availableEmployees.map((employee) => {
-                const total = employeeHours(employee.id);
-                const isCurrent = employee.id === shift.employeeId;
-                return (
-                  <button
-                    key={employee.id}
-                    className={cx(
-                      "rounded-md border p-3 text-left transition hover:border-mall hover:bg-paper",
-                      isCurrent ? "border-mall bg-mall/10" : "border-line bg-white"
-                    )}
-                    onClick={() => onAssign(employee.id)}
-                    type="button"
-                  >
-                    <span className="block font-black">{employee.name}</span>
-                    <span className="mt-1 block text-sm text-ink/65">
-                      {(total?.hours ?? 0).toFixed(1)}h, {total?.shifts ?? 0} shifts
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="rounded-lg border border-line p-4">
-            <div className="flex items-center justify-between gap-2">
-              <h3 className="font-black">Unavailable</h3>
-              <Badge tone={unavailableEmployees.length ? "warn" : "neutral"}>{unavailableEmployees.length}</Badge>
-            </div>
-            <div className="mt-3 grid gap-2">
-              {unavailableEmployees.length === 0 && (
-                <div className="rounded-md border border-dashed border-line p-3 text-sm text-ink/55">
-                  No conflicts for this shift.
-                </div>
-              )}
-              {unavailableEmployees.map((employee) => {
-                const status = availabilityStatusForShift(employee, shift, availability);
-                const overrideAllowed = employee.active && availableEmployees.length === 0;
-                return (
-                  <button
-                    key={employee.id}
-                    className={cx(
-                      "rounded-md border p-3 text-left transition disabled:cursor-not-allowed disabled:opacity-50",
-                      overrideAllowed ? "border-warn bg-warn/10 hover:bg-warn/15" : "border-line bg-paper"
-                    )}
-                    disabled={!overrideAllowed}
-                    onClick={() => onAssign(employee.id)}
-                    type="button"
-                  >
-                    <span className="block font-black">{employee.name}</span>
-                    <span className="mt-1 block text-sm text-ink/65">{status.reason}</span>
-                    {overrideAllowed && <span className="mt-2 block text-xs font-bold text-warn">Override allowed because nobody is available</span>}
-                  </button>
-                );
-              })}
-            </div>
           </div>
         </div>
       </div>
@@ -3026,9 +3569,11 @@ function AvailabilityEntryCard({
 
 function ShiftList({
   shifts,
+  coverageRequests = [],
   onRequestCoverage
 }: {
   shifts: Shift[];
+  coverageRequests?: CoverageRequest[];
   onRequestCoverage: (shiftId: string) => void;
 }) {
   if (shifts.length === 0) {
@@ -3037,23 +3582,43 @@ function ShiftList({
 
   return (
     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-      {shifts.map((shift) => (
-        <div key={shift.id} className="rounded-lg border border-line p-4">
-          <div className="flex items-start justify-between gap-2">
-            <div>
-              <div className="font-black">{getDayName(shift.date)}</div>
-              <div className="text-sm text-ink/65">
-                {formatTime(shift.startTime)}-{formatTime(shift.endTime)}
+      {shifts.map((shift) => {
+        const coverageRequest = coverageRequests.find((request) => request.shiftId === shift.id && request.status !== "cancelled");
+        const requestPending = coverageRequest?.status === "open" || coverageRequest?.status === "offered";
+        const requestLabel =
+          coverageRequest?.status === "open"
+            ? "Request sent"
+            : coverageRequest?.status === "offered"
+              ? "Offer pending"
+              : coverageRequest?.status === "approved"
+                ? "Covered"
+                : coverageRequest?.status === "rejected"
+                  ? "Rejected"
+                  : "Request coverage";
+
+        return (
+          <div key={shift.id} className="rounded-lg border border-line p-4">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <div className="font-black">{getDayName(shift.date)}</div>
+                <div className="text-sm text-ink/65">
+                  {formatTime(shift.startTime)}-{formatTime(shift.endTime)}
+                </div>
               </div>
+              <Badge tone={requestPending ? "warn" : "neutral"}>{requestPending ? "Coverage open" : `${shiftDurationHours(shift).toFixed(1)}h`}</Badge>
             </div>
-            <Badge>{shiftDurationHours(shift).toFixed(1)}h</Badge>
+            <Button
+              variant={requestPending || coverageRequest?.status === "rejected" ? "ghost" : "secondary"}
+              className={cx("mt-3 w-full", requestPending && "bg-paper text-ink/55")}
+              onClick={() => onRequestCoverage(shift.id)}
+              disabled={Boolean(coverageRequest)}
+            >
+              <Mail size={16} />
+              {requestLabel}
+            </Button>
           </div>
-          <Button variant="secondary" className="mt-3 w-full" onClick={() => onRequestCoverage(shift.id)}>
-            <Mail size={16} />
-            Request coverage
-          </Button>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
