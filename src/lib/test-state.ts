@@ -17,12 +17,21 @@ function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
+function errorCode(error: unknown) {
+  return typeof error === "object" && error !== null && "code" in error ? (error as { code?: string }).code : undefined;
+}
+
 function isMissingFile(error: unknown) {
+  return errorCode(error) === "ENOENT";
+}
+
+export function isTestStateWriteUnavailable(error: unknown) {
+  const code = errorCode(error);
   return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    (error as { code?: string }).code === "ENOENT"
+    code === "EROFS" ||
+    code === "EACCES" ||
+    code === "EPERM" ||
+    code === "ENOSPC"
   );
 }
 
@@ -50,7 +59,7 @@ export function createDefaultTestState(): StoredTestState {
   };
 }
 
-function normalizeTestState(candidate: Partial<StoredTestState>): StoredTestState {
+export function normalizeTestState(candidate: Partial<StoredTestState>): StoredTestState {
   const defaults = createDefaultTestState();
 
   return {
@@ -97,6 +106,11 @@ export async function appendTestNotification(notification: NotificationEntry) {
     notifications: [notification, ...state.notifications]
   };
 
-  await writeTestState(nextState);
+  try {
+    await writeTestState(nextState);
+  } catch (error) {
+    if (!isTestStateWriteUnavailable(error)) throw error;
+  }
+
   return nextState;
 }

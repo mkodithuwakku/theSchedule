@@ -76,6 +76,7 @@ export type Shift = {
   startTime: string;
   endTime: string;
   employeeId?: string;
+  externalAssigneeName?: string;
   notes?: string;
   originalEmployeeId?: string;
   originalStartTime?: string;

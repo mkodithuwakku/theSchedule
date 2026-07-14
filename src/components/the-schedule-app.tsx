@@ -155,6 +155,16 @@ function sortUnavailableEntries(entries: Unavailability[]) {
   return [...entries].sort((a, b) => `${a.date}${a.startTime ?? ""}`.localeCompare(`${b.date}${b.startTime ?? ""}`));
 }
 
+function addDays(date: string, days: number) {
+  const next = parseLocalDate(date);
+  next.setDate(next.getDate() + days);
+  return dateToIso(next);
+}
+
+function availabilityDeadlineForReleaseDate(releaseDate: string) {
+  return addDays(releaseDate, -2);
+}
+
 function buildCalendarWeeks(
   period: SchedulePeriod,
   shiftsByDate: Array<{ date: string; shifts: Shift[] }>
@@ -206,19 +216,6 @@ function downloadBlob(blob: Blob, filename: string) {
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
-}
-
-function copyComputedStyles(source: Element, target: Element) {
-  const styles = window.getComputedStyle(source);
-  const styleText = Array.from(styles)
-    .map((property) => `${property}:${styles.getPropertyValue(property)};`)
-    .join("");
-  (target as HTMLElement).setAttribute("style", styleText);
-
-  Array.from(source.children).forEach((child, index) => {
-    const targetChild = target.children[index];
-    if (targetChild) copyComputedStyles(child, targetChild);
-  });
 }
 
 function bytesFromString(value: string) {
@@ -273,56 +270,114 @@ function buildPdfFromJpeg(jpegBytes: Uint8Array, widthPx: number, heightPx: numb
   return new Blob([concatBytes(chunks)], { type: "application/pdf" });
 }
 
-async function renderElementToCanvas(element: HTMLElement) {
-  await document.fonts?.ready;
-  const rect = element.getBoundingClientRect();
-  const width = Math.ceil(Math.max(element.scrollWidth, rect.width));
-  const height = Math.ceil(Math.max(element.scrollHeight, rect.height));
-  const clone = element.cloneNode(true) as HTMLElement;
-  copyComputedStyles(element, clone);
-  clone.querySelectorAll(".no-export,.no-print").forEach((node) => node.remove());
-  clone.style.width = `${width}px`;
-  clone.style.minWidth = `${width}px`;
-  clone.style.height = `${height}px`;
-  clone.style.background = window.getComputedStyle(element).backgroundColor || "#ffffff";
-
-  const wrapper = document.createElement("div");
-  wrapper.setAttribute("xmlns", "http://www.w3.org/1999/xhtml");
-  wrapper.style.width = `${width}px`;
-  wrapper.style.height = `${height}px`;
-  wrapper.style.background = window.getComputedStyle(element).backgroundColor || "#ffffff";
-  wrapper.appendChild(clone);
-
-  const serialized = new XMLSerializer().serializeToString(wrapper);
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><foreignObject width="100%" height="100%">${serialized}</foreignObject></svg>`;
-  const image = new Image();
-  const svgUrl = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml;charset=utf-8" }));
-
-  try {
-    await new Promise<void>((resolve, reject) => {
-      image.onload = () => resolve();
-      image.onerror = () => reject(new Error("Unable to render schedule export."));
-      image.src = svgUrl;
-    });
-    const scale = Math.min(2, window.devicePixelRatio || 1);
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.round(width * scale);
-    canvas.height = Math.round(height * scale);
-    const context = canvas.getContext("2d");
-    if (!context) throw new Error("Unable to create schedule export.");
-    context.fillStyle = window.getComputedStyle(element).backgroundColor || "#ffffff";
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    context.scale(scale, scale);
-    context.drawImage(image, 0, 0);
-    return canvas;
-  } finally {
-    URL.revokeObjectURL(svgUrl);
-  }
+function shiftAssigneeLabel(shift: Shift, people: Employee[]) {
+  return shift.externalAssigneeName?.trim() || people.find((employee) => employee.id === shift.employeeId)?.name || "Unassigned";
 }
 
-async function downloadScheduleSnapshot(element: HTMLElement | null, title: string, format: "png" | "pdf") {
-  if (!element) return;
-  const canvas = await renderElementToCanvas(element);
+function drawRoundedRect(context: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number) {
+  context.beginPath();
+  context.moveTo(x + radius, y);
+  context.lineTo(x + width - radius, y);
+  context.quadraticCurveTo(x + width, y, x + width, y + radius);
+  context.lineTo(x + width, y + height - radius);
+  context.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+  context.lineTo(x + radius, y + height);
+  context.quadraticCurveTo(x, y + height, x, y + height - radius);
+  context.lineTo(x, y + radius);
+  context.quadraticCurveTo(x, y, x + radius, y);
+  context.closePath();
+}
+
+function drawText(context: CanvasRenderingContext2D, text: string, x: number, y: number, maxWidth: number) {
+  const trimmed = text.length > 42 ? `${text.slice(0, 39)}...` : text;
+  context.fillText(trimmed, x, y, maxWidth);
+}
+
+function renderScheduleCanvas(title: string, calendarWeeks: ReturnType<typeof buildCalendarWeeks>, people: Employee[]) {
+  const scale = Math.min(2, window.devicePixelRatio || 1);
+  const width = 1400;
+  const headerHeight = 92;
+  const dayHeaderHeight = 34;
+  const cellWidth = width / 7;
+  const cellHeight = 190;
+  const height = headerHeight + dayHeaderHeight + calendarWeeks.length * cellHeight + 28;
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(width * scale);
+  canvas.height = Math.round(height * scale);
+  canvas.style.width = `${width}px`;
+  canvas.style.height = `${height}px`;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Unable to create schedule export.");
+  context.scale(scale, scale);
+
+  context.fillStyle = "#f6f8fc";
+  context.fillRect(0, 0, width, height);
+  context.fillStyle = "#ffffff";
+  drawRoundedRect(context, 18, 18, width - 36, height - 36, 8);
+  context.fill();
+  context.strokeStyle = "#d7dee8";
+  context.lineWidth = 1;
+  context.stroke();
+
+  context.fillStyle = "#141822";
+  context.font = "800 26px Arial, sans-serif";
+  context.fillText(title, 42, 54);
+  context.font = "600 14px Arial, sans-serif";
+  context.fillStyle = "#667085";
+  context.fillText("The Schedule", 42, 78);
+
+  const weekdayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  context.fillStyle = "#0f62a3";
+  context.fillRect(18, headerHeight, width - 36, dayHeaderHeight);
+  weekdayLabels.forEach((label, index) => {
+    context.fillStyle = "#ffffff";
+    context.font = "800 13px Arial, sans-serif";
+    context.fillText(label.toUpperCase(), 34 + index * cellWidth, headerHeight + 22);
+  });
+
+  calendarWeeks.forEach((week, weekIndex) => {
+    week.forEach((day, dayIndex) => {
+      const x = 18 + dayIndex * cellWidth;
+      const y = headerHeight + dayHeaderHeight + weekIndex * cellHeight;
+      context.fillStyle = day.inPeriod ? "#ffffff" : "#f1f4f8";
+      context.fillRect(x, y, cellWidth, cellHeight);
+      context.strokeStyle = "#d7dee8";
+      context.strokeRect(x, y, cellWidth, cellHeight);
+
+      context.fillStyle = day.inPeriod ? "#141822" : "#98a2b3";
+      context.font = "800 16px Arial, sans-serif";
+      context.fillText(shortDayLabel(day.date), x + 12, y + 24);
+
+      day.shifts.slice(0, 4).forEach((shift, shiftIndex) => {
+        const chipY = y + 42 + shiftIndex * 33;
+        context.fillStyle = shift.employeeId || shift.externalAssigneeName ? "#e9f8f5" : "#f6f8fc";
+        drawRoundedRect(context, x + 10, chipY, cellWidth - 20, 27, 6);
+        context.fill();
+        context.strokeStyle = shift.externalAssigneeName ? "#f5ab45" : shift.employeeId ? "#6dd78d" : "#d7dee8";
+        context.stroke();
+
+        context.fillStyle = "#141822";
+        context.font = "800 11px Arial, sans-serif";
+        drawText(context, `${formatTime(shift.startTime)}-${formatTime(shift.endTime)}`, x + 18, chipY + 11, cellWidth - 36);
+        context.fillStyle = "#475467";
+        context.font = "600 11px Arial, sans-serif";
+        drawText(context, shiftAssigneeLabel(shift, people), x + 18, chipY + 23, cellWidth - 36);
+      });
+
+      if (day.shifts.length > 4) {
+        context.fillStyle = "#667085";
+        context.font = "700 11px Arial, sans-serif";
+        context.fillText(`+${day.shifts.length - 4} more`, x + 14, y + 180);
+      }
+    });
+  });
+
+  return canvas;
+}
+
+async function downloadScheduleSnapshot(title: string, calendarWeeks: ReturnType<typeof buildCalendarWeeks>, people: Employee[], format: "png" | "pdf") {
+  await document.fonts?.ready;
+  const canvas = renderScheduleCanvas(title, calendarWeeks, people);
   const filename = sanitizeFilename(title);
 
   if (format === "png") {
@@ -444,18 +499,20 @@ function Metric({
 }
 
 function ScheduleExportButtons({
-  targetRef,
-  title
+  title,
+  calendarWeeks,
+  people
 }: {
-  targetRef: React.RefObject<HTMLElement | null>;
   title: string;
+  calendarWeeks: ReturnType<typeof buildCalendarWeeks>;
+  people: Employee[];
 }) {
   const [exporting, setExporting] = useState<"png" | "pdf" | null>(null);
 
   async function exportSchedule(format: "png" | "pdf") {
     setExporting(format);
     try {
-      await downloadScheduleSnapshot(targetRef.current, title, format);
+      await downloadScheduleSnapshot(title, calendarWeeks, people, format);
     } catch {
       window.alert("The schedule export could not be created. Try again after the schedule finishes rendering.");
     } finally {
@@ -613,7 +670,7 @@ export function TheScheduleApp() {
     { label: "Invite employee", done: invitedEmployees > 0 },
     { label: "Submit availability", done: schedulableSubmittedIds.size > 0 },
     { label: "Submit no days", done: availability.some((submission) => submission.submittedAt && submission.unavailable.length === 0) },
-    { label: "Auto assign draft", done: shifts.length > 0 && unassignedShifts.length === 0 },
+    { label: "Auto complete names", done: shifts.length > 0 && unassignedShifts.length === 0 },
     { label: "Assign shifts", done: shifts.length > 0 && unassignedShifts.length === 0 },
     { label: "Publish schedule", done: period.status === "published" },
     { label: "Request coverage", done: coverage.length > 0 },
@@ -636,6 +693,12 @@ export function TheScheduleApp() {
       subject: `${activeEmployee.name} submitted availability`,
       recipient: "Manager",
       body: "Submission alert."
+    },
+    {
+      type: "availability_reminder",
+      subject: `Availability due ${period.availabilityDeadlineAt}`,
+      recipient: "Employees",
+      body: `Reminder before the ${period.releaseDate} schedule due date.`
     },
     {
       type: "schedule_published",
@@ -704,6 +767,10 @@ export function TheScheduleApp() {
   }, [availabilityForm.shiftTemplateId, availabilityForm.unavailableType, availableShiftTemplates]);
 
   useEffect(() => {
+    setSwapForm({ requesterShiftId: "", targetShiftId: "", reason: "" });
+  }, [activeEmployee.id]);
+
+  useEffect(() => {
     let cancelled = false;
 
     function applyStoredState(stored: Partial<StoredTestState>) {
@@ -711,8 +778,7 @@ export function TheScheduleApp() {
       if (stored.people) setPeople(stored.people);
       if (stored.period) setPeriod(stored.period);
       if (stored.shifts) {
-        const wasManuallyCleared = stored.auditLog?.some((entry) => entry.action === "all_shifts_cleared");
-        setShifts(stored.shifts.length > 0 || wasManuallyCleared ? stored.shifts : generateDefaultShifts(storedPeriod));
+        setShifts(stored.shifts.length > 0 ? stored.shifts : generateDefaultShifts(storedPeriod));
       }
       if (stored.availability) setAvailability(stored.availability);
       if (stored.coverage) setCoverage(stored.coverage);
@@ -790,7 +856,7 @@ export function TheScheduleApp() {
     })
       .then((response) => {
         if (!response.ok) throw new Error("Unable to save server test state.");
-        setPersistenceStatus("saved");
+        setPersistenceStatus(response.headers.get("X-Test-State-Persisted") === "false" ? "local" : "saved");
       })
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === "AbortError") return;
@@ -1115,7 +1181,7 @@ export function TheScheduleApp() {
     if (!target) return;
 
     if (!employeeId) {
-      setShifts((current) => current.map((shift) => (shift.id === shiftId ? { ...shift, employeeId: undefined } : shift)));
+      setShifts((current) => current.map((shift) => (shift.id === shiftId ? { ...shift, employeeId: undefined, externalAssigneeName: undefined } : shift)));
       addAudit("shift_unassigned", "Shift", shiftId, `Unassigned ${getDayName(target.date)} ${formatTime(target.startTime)}.`);
       if (target.employeeId) {
         addNotification(
@@ -1155,7 +1221,7 @@ export function TheScheduleApp() {
       );
     }
 
-    setShifts((current) => current.map((shift) => (shift.id === shiftId ? { ...shift, employeeId } : shift)));
+    setShifts((current) => current.map((shift) => (shift.id === shiftId ? { ...shift, employeeId, externalAssigneeName: undefined } : shift)));
     addNotification(
       "shift_assigned",
       `Shift assigned: ${getDayName(target.date)}`,
@@ -1174,8 +1240,18 @@ export function TheScheduleApp() {
     sourceAvailability = availability
   ) {
     const totals = new Map(sourcePeople.map((employee) => [employee.id, { shifts: 0, hours: 0 }]));
+    generated.forEach((shift) => {
+      if (!shift.employeeId || !totals.has(shift.employeeId)) return;
+      const current = totals.get(shift.employeeId) ?? { shifts: 0, hours: 0 };
+      totals.set(shift.employeeId, {
+        shifts: current.shifts + 1,
+        hours: current.hours + shiftDurationHours(shift)
+      });
+    });
 
     return generated.map((shift) => {
+      if (shift.employeeId || shift.externalAssigneeName) return shift;
+
       const candidates = sourcePeople
         .filter((employee) => employee.active && !isEmployeeUnavailable(employee.id, shift, sourceAvailability))
         .map((employee) => {
@@ -1207,12 +1283,7 @@ export function TheScheduleApp() {
 
   function generateDraft() {
     const existingBlocks = shifts.length > 0 ? shifts : generateDefaultShifts(period);
-    const baseShifts = existingBlocks.map((shift) => ({
-      ...shift,
-      employeeId: undefined,
-      originalEmployeeId: undefined
-    }));
-    const generated = canAutoAssignSchedule ? autoAssignDraft(baseShifts) : baseShifts;
+    const generated = canAutoAssignSchedule ? autoAssignDraft(existingBlocks) : existingBlocks;
     setShifts(generated);
     setSelectedShiftId(generated[0]?.id ?? null);
     setPeriod((current) => ({ ...current, status: "draft", publishedAt: undefined }));
@@ -1223,8 +1294,8 @@ export function TheScheduleApp() {
       buildNotificationHtml(
         `Draft generated: ${period.name}`,
         canAutoAssignSchedule
-          ? `${generated.length} shifts were balanced against availability.`
-          : `${generated.length} shift blocks were created without assignments. Collect availability before auto-assigning.`
+          ? `${generated.length} shift slots kept their times and empty names were filled against availability.`
+          : `${generated.length} shift slots are ready without names. Collect availability before auto-completing.`
       )
     );
     addAudit(
@@ -1232,8 +1303,37 @@ export function TheScheduleApp() {
       "SchedulePeriod",
       period.id,
       canAutoAssignSchedule
-        ? "Auto-assigned the current shift blocks from availability."
-        : "Kept shift blocks unassigned because accepted employees have not all submitted availability."
+        ? "Auto-completed employee names into the current shift slots."
+        : "Kept shift slots unassigned because accepted employees have not all submitted availability."
+    );
+  }
+
+  function updateScheduleReleaseDate(releaseDate: string) {
+    if (!releaseDate) return;
+    const availabilityDeadlineAt = availabilityDeadlineForReleaseDate(releaseDate);
+    const availabilityOpenAt = addDays(availabilityDeadlineAt, -6);
+    setPeriod((current) => ({
+      ...current,
+      releaseDate,
+      availabilityDeadlineAt,
+      availabilityOpenAt
+    }));
+    schedulableEmployees.forEach((employee) =>
+      addNotification(
+        "availability_reminder",
+        "Availability due date updated",
+        employee.id,
+        buildNotificationHtml(
+          "Availability due date updated",
+          `Please submit availability by ${availabilityDeadlineAt}. The schedule is due ${releaseDate}.`
+        )
+      )
+    );
+    addAudit(
+      "schedule_due_date_updated",
+      "SchedulePeriod",
+      period.id,
+      `Schedule due date changed to ${releaseDate}; availability deadline changed to ${availabilityDeadlineAt}.`
     );
   }
 
@@ -1254,7 +1354,7 @@ export function TheScheduleApp() {
     addAudit("calendar_shift_added", "Shift", shift.id, `Added shift on ${getDayName(date)}.`);
   }
 
-  function updateShift(shiftId: string, updates: Partial<Pick<Shift, "date" | "startTime" | "endTime" | "employeeId">>) {
+  function updateShift(shiftId: string, updates: Partial<Pick<Shift, "date" | "startTime" | "endTime" | "employeeId" | "externalAssigneeName">>) {
     const target = shifts.find((shift) => shift.id === shiftId);
     if (!target) return;
 
@@ -1267,6 +1367,40 @@ export function TheScheduleApp() {
 
     if (updates.employeeId !== undefined) {
       assignShift(shiftId, updates.employeeId);
+    }
+
+    if (updates.externalAssigneeName !== undefined) {
+      const externalName = updates.externalAssigneeName.trim();
+      setShifts((current) =>
+        current.map((shift) =>
+          shift.id === shiftId
+            ? {
+                ...shift,
+                employeeId: undefined,
+                externalAssigneeName: externalName || undefined
+              }
+            : shift
+        )
+      );
+      if (target.employeeId && period.status === "published") {
+        addNotification(
+          "shift_unassigned",
+          `Shift reassigned: ${getDayName(target.date)}`,
+          target.employeeId,
+          buildNotificationHtml(
+            `Shift reassigned: ${getDayName(target.date)}`,
+            `Your ${formatTime(target.startTime)}-${formatTime(target.endTime)} shift was reassigned to ${externalName || "an external helper"}.`
+          )
+        );
+      }
+      addAudit(
+        "external_shift_assigned",
+        "Shift",
+        shiftId,
+        externalName
+          ? `Assigned ${externalName} as an external helper for ${getDayName(target.date)} ${formatTime(target.startTime)}.`
+          : `Removed external helper from ${getDayName(target.date)} ${formatTime(target.startTime)}.`
+      );
     }
 
     const timeOrDateChanged = updates.date !== undefined || updates.startTime !== undefined || updates.endTime !== undefined;
@@ -1287,16 +1421,37 @@ export function TheScheduleApp() {
         .sort((a, b) => `${a.date}${a.startTime}`.localeCompare(`${b.date}${b.startTime}`))
     );
     addAudit("shift_time_updated", "Shift", shiftId, `Updated ${getDayName(updates.date ?? target.date)} shift time.`);
+    if (period.status === "published" && target.employeeId) {
+      addNotification(
+        "shift_updated",
+        `Shift updated: ${getDayName(updates.date ?? target.date)}`,
+        target.employeeId,
+        buildNotificationHtml(
+          `Shift updated: ${getDayName(updates.date ?? target.date)}`,
+          `Your shift is now ${formatTime(nextStart)}-${formatTime(nextEnd)} on ${getDayName(updates.date ?? target.date)}.`
+        )
+      );
+    }
   }
 
-  function clearAllShifts() {
-    if (shifts.length === 0) return;
-    const confirmed = window.confirm("Clear all shifts from this draft?");
+  function clearShiftAssignments() {
+    const assignedCount = shifts.filter((shift) => shift.employeeId || shift.externalAssigneeName).length;
+    if (assignedCount === 0) return;
+    const confirmed = window.confirm("Clear all employee names from this draft? Shift slots will stay on the calendar.");
     if (!confirmed) return;
-    setShifts([]);
+    setShifts((current) =>
+      current.map((shift) => ({
+        ...shift,
+        employeeId: undefined,
+        externalAssigneeName: undefined,
+        originalEmployeeId: undefined
+      }))
+    );
+    setCoverage([]);
+    setSwaps([]);
     setSelectedShiftId(null);
     setShowPublishReview(false);
-    addAudit("all_shifts_cleared", "SchedulePeriod", period.id, `Cleared ${shifts.length} shifts from the draft.`);
+    addAudit("shift_assignments_cleared", "SchedulePeriod", period.id, `Cleared ${assignedCount} employee assignments. Shift slots stayed on the calendar.`);
   }
 
   function removeShift(shiftId: string) {
@@ -2282,7 +2437,7 @@ export function TheScheduleApp() {
                       <div className="font-black">
                         {activeEmployeeNeedsAvailability ? "Availability still needed" : "Availability submitted"}
                       </div>
-                      <div className="mt-1 text-sm text-ink/60">Due before {period.releaseDate}</div>
+                      <div className="mt-1 text-sm text-ink/60">Due before {period.availabilityDeadlineAt}</div>
                     </div>
                   </div>
                   {activeEmployeeNeedsAvailability && (
@@ -2685,11 +2840,11 @@ export function TheScheduleApp() {
                     </Button>
                     <Button variant="secondary" onClick={generateDraft} disabled={!canAutoAssignSchedule}>
                       <RefreshCw size={16} />
-                      Auto assign
+                      Auto complete
                     </Button>
-                    <Button variant="danger" onClick={clearAllShifts} disabled={shifts.length === 0}>
+                    <Button variant="danger" onClick={clearShiftAssignments} disabled={unassignedShifts.length === shifts.length}>
                       <X size={16} />
-                      Clear
+                      Clear names
                     </Button>
                     <Button onClick={publishSchedule} disabled={period.status === "published"}>
                       <Send size={16} />
@@ -3176,7 +3331,7 @@ export function TheScheduleApp() {
         )}
 
         {activeTab === "settings" && mode === "manager" && (
-          <div className="grid gap-4 xl:grid-cols-3">
+          <div className="grid gap-4 xl:grid-cols-4">
             <Section title="Store Hours" icon={<Settings size={18} />}>
               <div className="grid gap-2">
                 {storeHours.map((hours) => (
@@ -3205,6 +3360,28 @@ export function TheScheduleApp() {
                     </div>
                   </div>
                 ))}
+              </div>
+            </Section>
+            <Section title="Schedule Due Date" icon={<CalendarDays size={18} />}>
+              <div className="grid gap-3">
+                <Field label="Schedule due">
+                  <input
+                    className={inputBase}
+                    type="date"
+                    value={period.releaseDate}
+                    min={period.availabilityOpenAt}
+                    max={period.endDate}
+                    onChange={(event) => updateScheduleReleaseDate(event.target.value)}
+                  />
+                </Field>
+                <div className="rounded-lg border border-line bg-paper p-3 text-sm">
+                  <div className="font-black">Availability due</div>
+                  <div className="mt-1 text-ink/65">{period.availabilityDeadlineAt}</div>
+                </div>
+                <div className="rounded-lg border border-line bg-paper p-3 text-sm">
+                  <div className="font-black">Reminder window</div>
+                  <div className="mt-1 text-ink/65">{period.availabilityOpenAt} to {period.availabilityDeadlineAt}</div>
+                </div>
               </div>
             </Section>
             <Section title="Access & Email" icon={<ShieldCheck size={18} />}>
@@ -3304,7 +3481,7 @@ function ScheduleGrid({
   assignablePeople?: Employee[];
   showAssignments?: boolean;
   onRemove?: (shiftId: string) => void;
-  onUpdateShift?: (shiftId: string, updates: Partial<Pick<Shift, "date" | "startTime" | "endTime" | "employeeId">>) => void;
+  onUpdateShift?: (shiftId: string, updates: Partial<Pick<Shift, "date" | "startTime" | "endTime" | "employeeId" | "externalAssigneeName">>) => void;
   onAddShiftForDate?: (date: string) => void;
   selectedShift?: Shift | null;
   selectedShiftId?: string | null;
@@ -3315,6 +3492,11 @@ function ScheduleGrid({
   const activePeople = (assignablePeople ?? people).filter((employee) => employee.active);
   const calendarDates = calendarWeeks.flatMap((week) => week).filter((day) => day.inPeriod).map((day) => day.date);
   const exportRef = useRef<HTMLElement | null>(null);
+  const [externalName, setExternalName] = useState("");
+
+  useEffect(() => {
+    setExternalName(selectedShift?.externalAssigneeName ?? "");
+  }, [selectedShift?.id, selectedShift?.externalAssigneeName]);
 
   function employeeStats(employeeId?: string | null) {
     return hours.find((item) => item.employeeId === employeeId);
@@ -3335,13 +3517,13 @@ function ScheduleGrid({
       captureRef={exportRef}
       action={
         action ?? (
-          <ScheduleExportButtons targetRef={exportRef} title={`${title} ${store.name} ${schedulePeriod.name}`} />
+          <ScheduleExportButtons title={`${title} ${store.name} ${schedulePeriod.name}`} calendarWeeks={calendarWeeks} people={people} />
         )
       }
     >
       {selectedShift && onUpdateShift && (
         <div className="mb-3 grid gap-3 rounded-lg border border-line bg-paper p-3 xl:grid-cols-[0.85fr_1.15fr]">
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-4">
             <Field label="Date">
               <select
                 className={inputBase}
@@ -3371,13 +3553,30 @@ function ScheduleGrid({
                 onChange={(event) => onUpdateShift(selectedShift.id, { endTime: event.target.value })}
               />
             </Field>
+            <Field label="External cover">
+              <div className="flex gap-2">
+                <input
+                  className={inputBase}
+                  value={externalName}
+                  onChange={(event) => setExternalName(event.target.value)}
+                  placeholder="Owner family"
+                />
+                <button
+                  className="h-9 shrink-0 rounded-md border border-line bg-white px-3 text-xs font-black text-ink hover:bg-paper"
+                  onClick={() => onUpdateShift(selectedShift.id, { externalAssigneeName: externalName })}
+                  type="button"
+                >
+                  Set
+                </button>
+              </div>
+            </Field>
           </div>
           <div className="grid gap-2">
             <div className="flex flex-wrap items-center gap-2">
               <button
                 className={cx(
                   "rounded-md border px-3 py-2 text-left text-sm font-bold transition hover:border-mall",
-                  !selectedShift.employeeId ? "border-mall bg-mall text-white" : "border-line bg-white text-ink"
+                  !selectedShift.employeeId && !selectedShift.externalAssigneeName ? "border-mall bg-mall text-white" : "border-line bg-white text-ink"
                 )}
                 onClick={() => onUpdateShift(selectedShift.id, { employeeId: "" })}
                 type="button"
@@ -3459,7 +3658,6 @@ function ScheduleGrid({
                         )}
                         {inPeriod &&
                           visibleShifts.map((shift) => {
-                            const assignedEmployee = people.find((employee) => employee.id === shift.employeeId);
                             const assignedUnavailable = shift.employeeId ? isEmployeeUnavailable(shift.employeeId, shift, availability) : false;
                             const isSelected = selectedShiftId === shift.id;
                             return (
@@ -3485,7 +3683,7 @@ function ScheduleGrid({
                                       {formatTime(shift.startTime)}-{formatTime(shift.endTime)}
                                     </div>
                                     <div className="mt-0.5 truncate text-xs font-semibold text-ink/60">
-                                      {assignedEmployee?.name ?? "Unassigned"} / {shiftDurationHours(shift).toFixed(1)}h
+                                      {shiftAssigneeLabel(shift, people)} / {shiftDurationHours(shift).toFixed(1)}h
                                     </div>
                                   </div>
                                   {onRemove && (
