@@ -124,8 +124,18 @@ model Store {
   invitations         StoreInvitation[]
   notifications       NotificationLog[]
   auditLogs           AuditLog[]
+  workspaceState      StoreWorkspaceState?
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
+}
+
+model StoreWorkspaceState {
+  storeId   String   @id
+  data      Json
+  version   Int      @default(1)
+  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model StoreMembership {

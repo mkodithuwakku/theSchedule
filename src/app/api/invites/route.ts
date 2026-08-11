@@ -1,9 +1,8 @@
 import { randomBytes } from "node:crypto";
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
 import { UserRole } from "@prisma/client";
+import { getCurrentAccess } from "@/lib/access";
 import { getAppBaseUrl } from "@/lib/app-url";
-import { authOptions } from "@/lib/auth";
 import { employeeInviteEmail, sendScheduleEmail } from "@/lib/email";
 import { prisma } from "@/lib/prisma";
 
@@ -34,28 +33,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Store is not configured. Run the Prisma seed before sending invites." }, { status: 500 });
   }
 
-  const session = await getServerSession(authOptions);
-  const sessionEmail = session?.user?.email ? normalizeEmail(session.user.email) : null;
-  const sessionUser = sessionEmail
-    ? await prisma.user.findUnique({
-        where: { email: sessionEmail }
-      })
-    : null;
-
-  const managerMembership = sessionUser
-    ? await prisma.storeMembership.findFirst({
-        where: {
-          storeId: store.id,
-          userId: sessionUser.id,
-          role: UserRole.manager,
-          active: true
-        }
-      })
-    : null;
-
-  if (process.env.NODE_ENV === "production" && !managerMembership) {
-    return NextResponse.json({ error: "Only active managers can send production invites." }, { status: 403 });
+  const access = await getCurrentAccess(store.id);
+  if (!access) return NextResponse.json({ error: "Sign in with an active employee account." }, { status: 401 });
+  if (access.role !== UserRole.manager) {
+    return NextResponse.json({ error: "Only active managers can send employee invites." }, { status: 403 });
   }
+
+  const sessionUser = await prisma.user.findUnique({ where: { id: access.userId } });
 
   const developmentManager =
     sessionUser ??

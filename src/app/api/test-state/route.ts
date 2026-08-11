@@ -1,46 +1,57 @@
 import { NextResponse } from "next/server";
-import { createDefaultTestState, isTestStateWriteUnavailable, normalizeTestState, readTestState, resetTestState, writeTestState } from "@/lib/test-state";
+import { getCurrentAccess, normalizeEmail } from "@/lib/access";
+import {
+  authorizeEmployeeStateUpdate,
+  readWorkspaceState,
+  resetWorkspaceState,
+  writeWorkspaceState
+} from "@/lib/workspace-state";
+
+function unauthorized() {
+  return NextResponse.json({ error: "Sign in with an active employee account." }, { status: 401 });
+}
+
+function forbidden(message = "You do not have permission to do that.") {
+  return NextResponse.json({ error: message }, { status: 403 });
+}
 
 export async function GET() {
-  const state = await readTestState();
-  return NextResponse.json(state);
+  const access = await getCurrentAccess();
+  if (!access) return unauthorized();
+
+  const state = await readWorkspaceState(access.storeId);
+  return NextResponse.json(state, {
+    headers: { "X-Test-State-Persisted": "true" }
+  });
 }
 
 export async function PUT(request: Request) {
-  const state = await request.json();
-  let savedState;
-  let persisted = true;
+  const access = await getCurrentAccess();
+  if (!access) return unauthorized();
 
-  try {
-    savedState = await writeTestState(state);
-  } catch (error) {
-    if (!isTestStateWriteUnavailable(error)) throw error;
-    savedState = normalizeTestState(state);
-    persisted = false;
+  const proposed = await request.json();
+  const existing = await readWorkspaceState(access.storeId);
+  let nextState = proposed;
+
+  if (access.role === "employee") {
+    const employee = existing.people.find((person) => normalizeEmail(person.email) === access.email);
+    if (!employee?.active) return forbidden("Your employee profile is not active in this schedule.");
+    nextState = authorizeEmployeeStateUpdate(existing, proposed, employee.id);
   }
 
+  const savedState = await writeWorkspaceState(access.storeId, nextState);
   return NextResponse.json(savedState, {
-    headers: {
-      "X-Test-State-Persisted": persisted ? "true" : "false"
-    }
+    headers: { "X-Test-State-Persisted": "true" }
   });
 }
 
 export async function DELETE() {
-  let state;
-  let persisted = true;
+  const access = await getCurrentAccess();
+  if (!access) return unauthorized();
+  if (access.role !== "manager") return forbidden("Only managers can reset the schedule workspace.");
 
-  try {
-    state = await resetTestState();
-  } catch (error) {
-    if (!isTestStateWriteUnavailable(error)) throw error;
-    state = createDefaultTestState();
-    persisted = false;
-  }
-
+  const state = await resetWorkspaceState(access.storeId);
   return NextResponse.json(state, {
-    headers: {
-      "X-Test-State-Persisted": persisted ? "true" : "false"
-    }
+    headers: { "X-Test-State-Persisted": "true" }
   });
 }

@@ -8,6 +8,7 @@ import {
   Clock,
   Download,
   FileText,
+  LogOut,
   Mail,
   Moon,
   Plus,
@@ -22,8 +23,9 @@ import {
   Users,
   X
 } from "lucide-react";
-import Link from "next/link";
+import { signOut } from "next-auth/react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { AppAccess } from "@/lib/access-shared";
 import {
   type AuditEntry,
   type AvailabilitySubmission,
@@ -534,11 +536,31 @@ function ScheduleExportButtons({
   );
 }
 
-export function TheScheduleApp() {
-  const [mode, setMode] = useState<"manager" | "employee">("manager");
+export function TheScheduleApp({
+  currentUser,
+  activeMemberEmails
+}: {
+  currentUser: AppAccess;
+  activeMemberEmails: string[];
+}) {
+  const isManager = currentUser.role === "manager";
+  const isDevelopmentTestMode = process.env.NODE_ENV !== "production";
+  const [mode, setMode] = useState<"manager" | "employee">(isManager ? "manager" : "employee");
   const [activeTab, setActiveTab] = useState<TabId>("dashboard");
-  const [activeEmployeeId, setActiveEmployeeId] = useState("emp_manager");
-  const [people, setPeople] = useState<Employee[]>(employees);
+  const [people, setPeople] = useState<Employee[]>(() => {
+    const signedInPerson = employees.find((employee) => employee.email.toLowerCase() === currentUser.email);
+    if (signedInPerson) return employees;
+    return [
+      ...employees,
+      {
+        id: `account_${currentUser.userId}`,
+        name: currentUser.name,
+        email: currentUser.email,
+        role: currentUser.role,
+        active: true
+      }
+    ];
+  });
   const [period, setPeriod] = useState<SchedulePeriod>(schedulePeriod);
   const [shifts, setShifts] = useState<Shift[]>(() => generateDefaultShifts(schedulePeriod));
   const [availability, setAvailability] = useState<AvailabilitySubmission[]>([]);
@@ -587,9 +609,17 @@ export function TheScheduleApp() {
   });
 
   const nameFor = (id?: string) => id === "owner_alert" ? "Application Owner" : people.find((employee) => employee.id === id)?.name ?? "Unassigned";
-  const managerIdentity = people.find((employee) => employee.role === "manager") ?? people[0];
-  const activeEmployee = people.find((employee) => employee.id === activeEmployeeId) ?? managerIdentity;
+  const signedInEmployee = people.find((employee) => employee.email.toLowerCase() === currentUser.email);
+  const managerIdentity = isManager ? signedInEmployee : people.find((employee) => employee.role === "manager");
+  const activeEmployee = signedInEmployee ?? {
+    id: `account_${currentUser.userId}`,
+    name: currentUser.name,
+    email: currentUser.email,
+    role: currentUser.role,
+    active: true
+  };
   const activeEmployees = people.filter((employee) => employee.active);
+  const activeMemberEmailSet = new Set(activeMemberEmails.map((email) => email.toLowerCase()));
   const dates = useMemo(() => getDatesInPeriod(period), [period]);
   const shiftsByDate = useMemo(
     () =>
@@ -612,7 +642,7 @@ export function TheScheduleApp() {
   const hasInviteSent = (employeeId: string) =>
     notifications.some((entry) => entry.type === "employee_invited" && entry.userId === employeeId);
   const inviteStatusFor = (employee: Employee) => {
-    if (employee.role === "manager" || hasAcceptedInvite(employee.id)) return "active" as const;
+    if (activeMemberEmailSet.has(employee.email.toLowerCase()) || hasAcceptedInvite(employee.id)) return "active" as const;
     if (hasInviteSent(employee.id) || employee.active) return "invited" as const;
     return "inactive" as const;
   };
@@ -679,7 +709,7 @@ export function TheScheduleApp() {
     { label: "Resolve issue", done: uatIssues.length > 0 && resolvedUatIssues.length > 0 }
   ];
   const completedUatItems = uatItems.filter((item) => item.done).length;
-  const currentIdentity = mode === "manager" ? managerIdentity : activeEmployee;
+  const currentIdentity = mode === "manager" ? managerIdentity ?? activeEmployee : activeEmployee;
   const currentTheme: ThemePreference = preferences[currentIdentity?.id ?? "default"]?.theme ?? "light";
   const notificationPreviews = [
     {
@@ -775,7 +805,23 @@ export function TheScheduleApp() {
 
     function applyStoredState(stored: Partial<StoredTestState>) {
       const storedPeriod = stored.period ?? schedulePeriod;
-      if (stored.people) setPeople(stored.people);
+      if (stored.people) {
+        const hasSignedInPerson = stored.people.some((employee) => employee.email.toLowerCase() === currentUser.email);
+        setPeople(
+          hasSignedInPerson
+            ? stored.people
+            : [
+                ...stored.people,
+                {
+                  id: `account_${currentUser.userId}`,
+                  name: currentUser.name,
+                  email: currentUser.email,
+                  role: currentUser.role,
+                  active: true
+                }
+              ]
+        );
+      }
       if (stored.period) setPeriod(stored.period);
       if (stored.shifts) {
         setShifts(stored.shifts.length > 0 ? stored.shifts : generateDefaultShifts(storedPeriod));
@@ -824,7 +870,7 @@ export function TheScheduleApp() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [currentUser.email, currentUser.name, currentUser.role, currentUser.userId]);
 
   useEffect(() => {
     if (!hasLoadedStoredState) return;
@@ -2109,9 +2155,9 @@ export function TheScheduleApp() {
   }
 
   function resetTestRun() {
+    if (!isManager) return;
     setMode("manager");
     setActiveTab("dashboard");
-    setActiveEmployeeId("emp_manager");
     setPeople(employees);
     setPeriod(schedulePeriod);
     setShifts(generateDefaultShifts(schedulePeriod));
@@ -2139,6 +2185,7 @@ export function TheScheduleApp() {
   }
 
   function applyScenarioPreset(preset: ScenarioPreset) {
+    if (!isManager) return;
     const presetAvailability = preset === "fresh" ? [] : availabilitySubmissions;
     const defaultShiftBlocks = generateDefaultShifts(schedulePeriod);
     const presetInviteAcceptances =
@@ -2238,36 +2285,27 @@ export function TheScheduleApp() {
                 <strong>{currentIdentity?.name ?? "Test user"}</strong>
               </span>
             </div>
-            <div className="inline-flex rounded-lg border border-line bg-white p-1">
-              <button
-                className={cx("h-8 rounded-md px-3 text-sm font-semibold", mode === "manager" && "bg-mall text-white")}
-                onClick={() => {
-                  setMode("manager");
-                  setActiveTab("dashboard");
-                }}
-              >
-                Manager
-              </button>
-              <button
-                className={cx("h-8 rounded-md px-3 text-sm font-semibold", mode === "employee" && "bg-mall text-white")}
-                onClick={() => {
-                  setMode("employee");
-                  setActiveEmployeeId(managerIdentity.id);
-                  setActiveTab("dashboard");
-                }}
-              >
-                Employee
-              </button>
-            </div>
-
-            {mode === "employee" && (
-              <select className={cx(inputBase, "w-48")} value={activeEmployeeId} onChange={(event) => setActiveEmployeeId(event.target.value)}>
-                {activeEmployees.map((employee) => (
-                  <option key={employee.id} value={employee.id}>
-                    {employee.name}{employee.role === "manager" ? " (manager)" : ""}
-                  </option>
-                ))}
-              </select>
+            {isManager && (
+              <div className="inline-flex rounded-lg border border-line bg-white p-1">
+                <button
+                  className={cx("h-8 rounded-md px-3 text-sm font-semibold", mode === "manager" && "bg-mall text-white")}
+                  onClick={() => {
+                    setMode("manager");
+                    setActiveTab("dashboard");
+                  }}
+                >
+                  Manager
+                </button>
+                <button
+                  className={cx("h-8 rounded-md px-3 text-sm font-semibold", mode === "employee" && "bg-mall text-white")}
+                  onClick={() => {
+                    setMode("employee");
+                    setActiveTab("dashboard");
+                  }}
+                >
+                  My employee view
+                </button>
+              </div>
             )}
 
             <Button
@@ -2278,13 +2316,21 @@ export function TheScheduleApp() {
               {currentTheme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
               {currentTheme === "dark" ? "Light" : "Dark"}
             </Button>
-            <Button variant="secondary" onClick={() => void sendTestEmail()} disabled={testEmailStatus === "sending"}>
-              <Mail size={16} />
-              {testEmailStatus === "sending" ? "Sending" : "Test"}
-            </Button>
-            <Button variant="secondary" onClick={resetTestRun}>
-              <RefreshCw size={16} />
-              Reset
+            {isDevelopmentTestMode && isManager && (
+              <>
+                <Button variant="secondary" onClick={() => void sendTestEmail()} disabled={testEmailStatus === "sending"}>
+                  <Mail size={16} />
+                  {testEmailStatus === "sending" ? "Sending" : "Test"}
+                </Button>
+                <Button variant="secondary" onClick={resetTestRun}>
+                  <RefreshCw size={16} />
+                  Reset
+                </Button>
+              </>
+            )}
+            <Button variant="secondary" onClick={() => void signOut({ callbackUrl: "/" })}>
+              <LogOut size={16} />
+              Sign out
             </Button>
           </div>
         </div>
@@ -2330,7 +2376,7 @@ export function TheScheduleApp() {
         </nav>
       </header>
 
-      <div className="no-print border-b border-line bg-paper">
+      {isDevelopmentTestMode && isManager && <div className="no-print border-b border-line bg-paper">
         <div className="mx-auto flex max-w-[1800px] flex-col gap-3 px-4 py-2.5 text-sm xl:px-6 2xl:px-8 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-start gap-2">
             <ShieldCheck size={17} className="mt-0.5 shrink-0 text-mall" />
@@ -2350,7 +2396,7 @@ export function TheScheduleApp() {
             <Button variant="secondary" onClick={() => applyScenarioPreset("published")}>Published</Button>
           </div>
         </div>
-      </div>
+      </div>}
 
       <div className="mx-auto grid max-w-[1800px] gap-4 px-4 py-4 pb-24 xl:px-6 2xl:px-8 md:pb-4">
         {showIssueReporter && (
@@ -3389,10 +3435,10 @@ export function TheScheduleApp() {
                 <div className="rounded-lg border border-line p-3">
                   <div className="text-xs font-semibold uppercase tracking-normal text-ink/55">Approved access</div>
                   <div className="mt-2 font-black">{people.filter((person) => person.active).length} active Gmail accounts</div>
-                  <Link className={cx(buttonBase, "mt-3 border-line bg-white text-ink hover:bg-paper")} href="/api/auth/signin">
-                    <ShieldCheck size={16} />
-                    Google sign-in
-                  </Link>
+                  <div className="mt-3 rounded-md bg-paper p-3 text-sm">
+                    <div className="font-bold">Signed in as {currentUser.email}</div>
+                    <div className="mt-1 capitalize text-ink/60">{currentUser.role} access</div>
+                  </div>
                 </div>
                 <div className="rounded-lg border border-line p-3">
                   <div className="text-xs font-semibold uppercase tracking-normal text-ink/55">Test notification</div>

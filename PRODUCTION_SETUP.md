@@ -5,12 +5,26 @@ This is the checklist for hosting The Schedule on a real HTTPS URL so invite lin
 ## What Is Now Wired
 
 - Prisma/Postgres schema for users, stores, memberships, schedule periods, availability, shifts, invites, notifications, and audit logs.
-- Google/Auth.js login with approved membership checks.
+- Google/Auth.js login with active user and store-membership checks.
 - Pending invite emails are allowed through Google login so employees can accept a new invitation.
 - Real invite records through `StoreInvitation`.
 - Real invite acceptance route: `/api/invites/accept?token=...`.
 - Resend email delivery support for invites, notifications, and owner alerts.
+- The hosted schedule workspace is persisted in Neon through `StoreWorkspaceState`, rather than Vercel's temporary filesystem.
+- The signed-in Google email is bound to one employee identity. Employees cannot switch identities or open manager tools.
+- Manager-only checks protect employee invites, schedule resets, reports, manager state changes, and unrestricted notification sends at the API layer.
 - Production environment templates in `.env.production.example`.
+
+## Access Levels
+
+| Signed-in status | Access |
+| --- | --- |
+| No Google session | Sign-in screen only |
+| Google account without an active membership | Access denied; the exact email must be invited |
+| Active employee membership | Own availability, shifts, coverage, swaps, and team schedule |
+| Active manager membership | All manager tools plus the manager's own employee view |
+
+Changing a person's access is a database operation on `StoreMembership.role` and `StoreMembership.active`. The client-side interface is not trusted as the source of permission.
 
 ## What You Need To Configure
 
@@ -30,6 +44,8 @@ This is the checklist for hosting The Schedule on a real HTTPS URL so invite lin
 
    Later, once production data matters, use migrations with `npm run prisma:migrate` locally and `npm run prisma:deploy` in hosting.
 
+   After pulling the Gmail authorization update, run `npm run prisma:push` once against Neon to add `StoreWorkspaceState` before deploying the new app code.
+
 4. Configure Google OAuth.
    You need Google OAuth credentials, not the Gmail API, for sign-in:
 
@@ -44,6 +60,8 @@ This is the checklist for hosting The Schedule on a real HTTPS URL so invite lin
    - Authorized JavaScript origin: `https://your-domain`
    - Authorized redirect URI: `https://your-domain/api/auth/callback/google`
 
+   In the OAuth consent screen, add every employee as a test user while the Google app remains in Testing. If the app is published for external use, invited Google accounts can sign in without being manually listed as OAuth test users.
+
 5. Configure email sending.
    The app uses Resend for application emails:
 
@@ -56,8 +74,22 @@ This is the checklist for hosting The Schedule on a real HTTPS URL so invite lin
 6. Seed the store and manager.
    `SEED_MANAGER_EMAIL` should stay as `m.kodithuwakku803@gmail.com` unless the manager account changes.
 
+   Verify the seeded manager email in Neon before inviting employees. A placeholder such as `manager@example.com` must not remain the only manager membership.
+
 7. Send production invites from the hosted app.
    The manager adds an employee email in the Employees tab. The app creates a database invite and emails a link to `/api/invites/accept?token=...`.
+
+8. Redeploy on Vercel after the schema update.
+   Keep `NEXTAUTH_URL` and `NEXT_PUBLIC_APP_URL` equal to the canonical HTTPS domain, then confirm the Google redirect URI uses that same domain exactly.
+
+## Production Verification
+
+1. Open the domain in a private browser and confirm it shows only the Google sign-in screen.
+2. Sign in with an uninvited account and confirm access is denied.
+3. Sign in with an employee account and confirm there is no role or employee switcher.
+4. Confirm the employee can change only their own availability and requests.
+5. Sign in with the manager account and confirm manager tools plus `My employee view` are available.
+6. Refresh on a second device and confirm schedule changes persist through Neon.
 
 ## What To Ask Your Manager For
 

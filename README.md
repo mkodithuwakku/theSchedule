@@ -11,13 +11,13 @@ The app is based on the uploaded Store Scheduler SRS and includes:
 - Google/Auth.js-ready approved Gmail access control
 - Prisma PostgreSQL schema for users, stores, memberships, periods, availability, shifts, coverage, swaps, snapshots, notifications, and audit logs
 - Database-backed employee invitation records and invite acceptance route for hosted UAT
-- API-backed test state saved on the server for the current manager/employee simulation
+- Neon-backed shared workspace state for hosted manager and employee use
 - Men Are From Mars default store hours and shift templates
 - Saved light/dark theme preference per test identity
 - Documented future path for multi-store expansion with store-specific branding, employees, schedules, and themes
 - Manager dashboard, employee management, availability tracker, schedule builder, coverage/swap approvals, hours report, CSV export, print view, and settings
 - Employee dashboard, availability submission, my shifts, full team schedule, coverage offers, and swap requests
-- UAT checklist and one-click scenario presets for fresh pre-release, submitted availability, generated draft, and published schedule states
+- Development-only UAT checklist and scenario presets
 - UAT issue tracker with status toggles and CSV/JSON export
 - Employee invite acceptance mock for testing the Gmail join flow before production auth is enabled
 - Manager notification preview center for invite, availability, publishing, coverage, swap, and approval emails
@@ -33,9 +33,17 @@ cp .env.example .env
 npm run dev
 ```
 
-Open `http://localhost:3000`.
+Open `http://localhost:3000` and sign in with an active seeded Google account.
 
-The visible MVP uses seeded test data and saves the current test run through `/api/test-state` into `data/test-state.json`. That lets you act as the manager and multiple employees before connecting a live database.
+Run the authorization regression suite with:
+
+```bash
+npm test
+```
+
+The suite verifies that employees cannot modify manager-controlled schedule fields, impersonate coworkers, approve manager requests, forge audit entries, or resolve UAT issues.
+
+The app uses seeded scheduling data and saves the shared workspace through `/api/test-state` into Neon. Google sign-in is required, and each account is bound to its own active `StoreMembership`.
 
 Current test accounts:
 
@@ -44,16 +52,16 @@ Current test accounts:
 - Employee: `m.kodithuwakku.hockey@gmail.com`
 - Employee: `bobby.cazby@gmail.com`
 
-## Test Workflow
+## Access-Controlled Workflow
 
 The app currently opens in a pre-release test state:
 
-1. Switch to `Employee`, choose different employees, and submit unavailable days or time ranges.
-2. Switch to `Manager` and watch the `Availability` tab badge count drop as employees submit.
-3. Open `Builder`, click `Generate`, assign employees, and publish the draft schedule.
-4. Switch back to employees to confirm their published shifts are visible.
+1. Each employee signs in with the exact Google email the manager invited and submits their own unavailable days or time ranges.
+2. The manager signs in with an active manager membership and watches the `Availability` tab badge count drop.
+3. The manager opens `Builder`, generates the schedule, assigns employees, and publishes the draft.
+4. Employees refresh their own accounts to see published shifts and use coverage or swap tools.
 
-The app includes a test-mode banner with scenario presets:
+In local development only, managers also see a test-mode banner with scenario presets:
 
 - `Fresh pre-release`
 - `Availability submitted`
@@ -61,8 +69,8 @@ The app includes a test-mode banner with scenario presets:
 - `Published`
 
 Employees who have not submitted availability see a highlighted `Availability` tab and dashboard prompt.
-The manager account can switch to `Employee` view to submit its own availability, view assigned shifts, request coverage, and test employee tasks while retaining manager access in the manager view.
-The test state persists through the local API and mirrors to browser storage as a fallback. `Reset test` starts the simulated release cycle over.
+The manager account can switch to `My employee view` for its own availability, shifts, coverage, and swaps. It cannot impersonate another employee.
+The workspace persists through Neon. Browser storage remains only a temporary resilience fallback when the API cannot be reached.
 Schedule views render as Sunday-start calendar weeks.
 In the manager builder, click a shift to open the assignment panel, use `Unassigned` to filter unassigned shifts, and `Publish` warns before publishing with unassigned shifts.
 Coverage requests and shift swaps are included in the saved test state, so they survive refreshes and can be tested across manager/employee role switches.
@@ -98,8 +106,8 @@ NEXT_PUBLIC_APP_URL="http://localhost:3000"
 
 Only users with an active store membership are allowed through the Auth.js sign-in callback.
 Users with a pending, unexpired store invite are also allowed through Google login so they can accept the invite and activate membership.
-The manager Settings screen links to the Auth.js sign-in route and shows the approved Gmail test accounts.
-In test mode, the manager `Employees` tab adds approved Gmail accounts and sends an employee invitation notification. The app only distinguishes between manager access and employee access; store-specific job roles are intentionally not part of the workflow.
+The signed-in email is matched to an active user and active store membership on the server before the app renders. The manager `Employees` tab creates Gmail invitations. Employees are locked to their own identity, and manager-only APIs independently enforce manager status.
+The app only distinguishes between manager access and employee access; store-specific job roles are intentionally not part of the workflow.
 Managers can still work floor shifts. In this app, manager/employee is an access level, not a store job role, so active manager accounts can appear in availability, assignment, shift, coverage, and swap workflows.
 
 ## Email Setup
@@ -156,4 +164,4 @@ Implemented in the working MVP surface:
 - Employees have mobile quick actions for availability, shifts, team schedule, and issue reporting.
 - Print/download paths are available from schedule and report surfaces.
 
-Next production hardening step: replace the JSON-backed test repository with Prisma-backed server actions and route handlers while keeping the same business rules from `src/lib/demo-data.ts`.
+Next production hardening step: move each scheduling workflow from the shared Neon JSON workspace into its existing normalized Prisma models and transactional server actions while keeping the same business rules from `src/lib/demo-data.ts`.

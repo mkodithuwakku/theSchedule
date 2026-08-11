@@ -6,7 +6,7 @@ This file is the quick handoff for new Codex sessions working on The Schedule. R
 
 The Schedule is a Next.js scheduling MVP based on the uploaded Store Scheduler SRS. It is currently focused on one mall store, Men Are From Mars, and replaces an Excel/paper scheduling workflow with manager and employee views.
 
-The current product goal is personal UAT before production auth/database hardening:
+The current product goal is hosted, authenticated UAT with Google identities and Neon-backed shared state:
 
 - Employees can accept a mocked Gmail invite, submit unavailable days, submit no unavailable days, view shifts, request coverage, offer coverage, and request swaps.
 - Managers can invite employees by Gmail, track availability, generate and assign schedules, review publish warnings, publish schedules, approve coverage/swaps, preview notifications, export reports, and log UAT issues.
@@ -21,13 +21,16 @@ The current product goal is personal UAT before production auth/database hardeni
 - `src/lib/demo-data.ts` holds seeded business data, scheduling helpers, availability conflict logic, hours calculations, and notification/log types.
 - `src/lib/test-state-shared.ts` defines the persisted JSON test-state contract used by the client and API route.
 - `src/lib/test-state.ts` normalizes the JSON-backed test-state payload.
-- `src/app/api/test-state/route.ts` persists local UAT state to `data/test-state.json`.
+- `src/lib/access.ts` resolves the signed-in Google account to an active Neon store membership.
+- `src/lib/workspace-state.ts` persists and role-filters the shared schedule workspace in Neon.
+- `src/app/api/test-state/route.ts` requires authentication, allows managers full writes, and sanitizes employee writes to their own permitted workflow data.
 - `src/app/api/notifications/test-email/route.ts` handles test notification sends/logging.
 - `src/app/api/invites/route.ts` creates production invite records and sends invite emails.
 - `src/app/api/invites/accept/route.ts` lets invited employees accept a token after Google sign-in.
 - `src/lib/email.ts` wraps email delivery and defines the owner alert email fallback. Without `RESEND_API_KEY`, notifications safely return queued/logged behavior.
 - `src/lib/app-url.ts` centralizes the public app URL used in invite links.
 - `prisma/schema.prisma` contains the production-facing data model, including Store and StoreMembership for future multi-store expansion.
+- `StoreWorkspaceState` is the current hosted shared-state bridge while schedule workflows are moved into normalized Prisma models.
 - `public/men-are-from-mars-logo.png` is the current store logo asset.
 - `README.md` is the user-facing project overview and setup guide.
 - `PRODUCTION_SETUP.md` is the hosted UAT checklist and manager domain/payment handoff.
@@ -36,6 +39,7 @@ The current product goal is personal UAT before production auth/database hardeni
 
 ```bash
 npm run dev
+npm test
 npm run lint
 npm run typecheck
 npm run build
@@ -43,7 +47,7 @@ npm run build
 
 The dev app usually runs at `http://127.0.0.1:3000`. If `npm run build` leaves the dev server returning 500s, stop the dev server, clear `.next`, and restart `npm run dev -- --hostname 127.0.0.1 --port 3000`.
 
-`npm run dev` intentionally resets `data/test-state.json` through `predev` so each local UAT run starts from a clean checklist state. The fresh state still shows the default shift blocks, but has no accepted invites, availability submissions, assignments, requests, or UAT issue progress.
+Starting the development server does not reset Neon. Use the manager-only reset control in development when a clean UAT workspace is intentionally required.
 
 ## UAT Flow To Preserve
 
@@ -59,6 +63,13 @@ The app should start before schedule release so the manager can test the whole c
 8. Employees review their shifts and team calendar.
 9. Coverage requests and swaps can be tested after publishing.
 10. UAT issues can be logged, resolved/reopened, and exported.
+
+Authentication rules to preserve:
+
+- Every page visit requires Google sign-in and an active `User` plus active `StoreMembership`.
+- Employees are bound to the profile matching their signed-in email and cannot switch identities.
+- Managers can use manager tools and their own employee view, but cannot impersonate another employee.
+- Manager permissions must be checked again in route handlers; hiding a control is not sufficient authorization.
 
 Important UX expectations from the user:
 
@@ -93,10 +104,10 @@ Multi-store support is planned but not active yet. When it is added:
 
 ## Next Likely Work
 
-Before real UAT:
+Before broader real-user UAT:
 
-- Add stronger browser smoke tests for the full manager/employee cycle.
-- Add production route/server-action layer backed by Prisma instead of JSON test state.
-- Add real Google invite acceptance and membership activation flow.
+- Replace whole-workspace autosaves with normalized Prisma route handlers/server actions and database transactions. This prevents stale manager and employee browser snapshots from overwriting each other.
+- Add browser-level authentication tests for signed-out, uninvited, inactive, employee, and manager accounts; the current unit suite covers employee state-write authorization.
+- Add manager-controlled activate/deactivate and promote/demote controls backed by `StoreMembership`, with audit logging and protection against removing the final active manager.
 - Add mobile visual QA for the calendar, availability submission, and employee dashboard.
-- Add seed/test data reset tooling that preserves a clean UAT start state.
+- Complete hosted invite, login, availability, schedule, coverage, and swap UAT across manager and employee devices.

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { OWNER_ALERT_EMAIL, ownerAlertEmail, sendScheduleEmail } from "@/lib/email";
-import { appendTestNotification, readTestState } from "@/lib/test-state";
+import { getCurrentAccess } from "@/lib/access";
+import { appendWorkspaceNotification, readWorkspaceState } from "@/lib/workspace-state";
 import type { NotificationEntry } from "@/lib/demo-data";
 
 type TestEmailRequest = {
@@ -16,8 +17,28 @@ type TestEmailRequest = {
 };
 
 export async function POST(request: Request) {
+  const access = await getCurrentAccess();
+  if (!access) return NextResponse.json({ error: "Sign in with an active employee account." }, { status: 401 });
+
   const body = (await request.json()) as TestEmailRequest;
-  const state = await readTestState();
+  const employeeAllowedTypes = new Set([
+    "availability_submitted",
+    "coverage_requested",
+    "coverage_opened",
+    "coverage_offer",
+    "swap_requested",
+    "swap_response",
+    "uat_issue_reported",
+    "software_outage"
+  ]);
+  if (access.role !== "manager" && (body.to || !employeeAllowedTypes.has(body.type ?? ""))) {
+    return NextResponse.json({ error: "Employees can only send notifications created by their own schedule actions." }, { status: 403 });
+  }
+  if (access.role !== "manager" && body.ownerAlert && body.type !== "uat_issue_reported" && body.type !== "software_outage") {
+    return NextResponse.json({ error: "Employees cannot send this owner alert." }, { status: 403 });
+  }
+
+  const state = await readWorkspaceState(access.storeId);
   const stateRecipient = state.people.find((person) => person.id === body.userId);
   const fallbackRecipient = state.people.find((person) => person.role === "manager") ?? state.people[0];
   const recipient = body.ownerAlert
@@ -80,7 +101,7 @@ export async function POST(request: Request) {
   };
 
   if (!body.skipLog) {
-    await appendTestNotification(notification);
+    await appendWorkspaceNotification(access.storeId, notification);
   }
 
   return NextResponse.json({
