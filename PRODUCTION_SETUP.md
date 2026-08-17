@@ -96,14 +96,23 @@ Changing a person's access is a database operation on `StoreMembership.role` and
 
 ## Production Verification
 
-1. Open the domain in a private browser and confirm it shows only the Google sign-in screen.
-2. Sign in with an uninvited account and confirm access is denied.
-3. Sign in with an employee account and confirm there is no role or employee switcher.
-4. Confirm the employee can change only their own availability and requests.
-5. Sign in with the manager account and confirm manager tools plus `My employee view` are available.
-6. Refresh on a second device and confirm schedule changes persist through Neon.
-7. Temporarily set a draft period release date three days ahead, invoke the secured cron route, and confirm each active member receives one availability email and a second invocation reports duplicates skipped.
-8. Publish the schedule and confirm each active member receives one consolidated email containing all of their assigned shifts; verify provider IDs or failure reasons in `NotificationLog`.
+Use the manager `Test Plan` tab as the source of truth. It contains 105 manually tracked production flows, including signed-out/unauthorized paths, first and repeat Google login, invite token edge cases, every availability type, builder warnings, publish retries, coverage and swap approval/rejection paths, exports, concurrency, provider failures, and reset verification. Results persist through Neon and can be exported to CSV or JSON.
+
+Start with the critical tests and use separate private browser profiles for manager and employee identities. Mark any dependency that cannot safely be simulated in production as Blocked and log a UAT issue for every Failed result.
+
+### Starting a clean end-to-end run
+
+Only an active manager can perform the full reset:
+
+1. Open `Test Plan` → `Clean production UAT run`.
+2. Read the destructive-scope warning.
+3. Type `RESET CLEAN RUN` exactly.
+4. Confirm the browser warning.
+5. The reset clears workspace/checklist state, invitations, normalized schedules, notification deduplication and logs, audit logs, Auth.js Google account links, and active sessions.
+6. The store configuration plus the four seeded users and memberships are restored. A new date-relative period opens availability immediately, closes it after five Edmonton calendar days, releases after seven days, and starts the schedule the following day.
+7. Every browser is signed out. Sign in again to test first-login Google linking.
+
+The reset is protected by server-side manager authorization and an exact confirmation phrase. Each run has a unique identifier, so an old tab from a previous run receives a conflict instead of restoring stale data.
 
 ## What To Ask Your Manager For
 

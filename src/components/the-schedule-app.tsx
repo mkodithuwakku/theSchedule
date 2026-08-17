@@ -61,6 +61,7 @@ import {
   type NotificationEntry
 } from "@/lib/demo-data";
 import {
+  DEFAULT_UAT_RUN_ID,
   STORAGE_KEY,
   TEST_TODAY,
   type InviteAcceptance,
@@ -70,6 +71,12 @@ import {
   type UatIssueCategory,
   type UserPreference
 } from "@/lib/test-state-shared";
+import {
+  UAT_CHECKLIST_GROUPS,
+  UAT_CHECKLIST_ITEMS,
+  type UatCheckStatus
+} from "@/lib/uat-checklist";
+import { CLEAN_RUN_CONFIRMATION } from "@/lib/uat-reset-shared";
 
 type TabId =
   | "dashboard"
@@ -79,6 +86,7 @@ type TabId =
   | "requests"
   | "reports"
   | "settings"
+  | "uat-plan"
   | "issues"
   | "notifications"
   | "my-shifts"
@@ -562,6 +570,7 @@ export function TheScheduleApp({
       }
     ];
   });
+  const [uatRunId, setUatRunId] = useState(DEFAULT_UAT_RUN_ID);
   const [period, setPeriod] = useState<SchedulePeriod>(schedulePeriod);
   const [shifts, setShifts] = useState<Shift[]>(() => generateDefaultShifts(schedulePeriod));
   const [availability, setAvailability] = useState<AvailabilitySubmission[]>([]);
@@ -573,6 +582,7 @@ export function TheScheduleApp({
   const [preferences, setPreferences] = useState<Record<string, UserPreference>>({});
   const [uatIssues, setUatIssues] = useState<UatIssue[]>([]);
   const [inviteAcceptances, setInviteAcceptances] = useState<InviteAcceptance[]>([]);
+  const [uatChecklist, setUatChecklist] = useState<Record<string, UatCheckStatus>>({});
   const [hasLoadedStoredState, setHasLoadedStoredState] = useState(false);
   const [persistenceStatus, setPersistenceStatus] = useState<PersistenceStatus>("loading");
   const [testEmailStatus, setTestEmailStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
@@ -581,6 +591,10 @@ export function TheScheduleApp({
   const [showIssueReporter, setShowIssueReporter] = useState(false);
   const [showPublishReview, setShowPublishReview] = useState(false);
   const [publishStatus, setPublishStatus] = useState<"idle" | "publishing" | "error">("idle");
+  const [uatSearch, setUatSearch] = useState("");
+  const [hidePassedUat, setHidePassedUat] = useState(false);
+  const [cleanResetConfirmation, setCleanResetConfirmation] = useState("");
+  const [cleanResetStatus, setCleanResetStatus] = useState<"idle" | "resetting" | "error">("idle");
   const [availabilityForm, setAvailabilityForm] = useState({
     date: period.startDate,
     unavailableType: "full_day" as UnavailableType,
@@ -639,7 +653,6 @@ export function TheScheduleApp({
   const activeSubmission = availability.find((submission) => submission.userId === activeEmployee.id);
   const activeAvailabilityDraft = sortUnavailableEntries(availabilityDrafts[activeEmployee.id] ?? []);
   const submittedIds = new Set(availability.filter((submission) => submission.submittedAt).map((submission) => submission.userId));
-  const invitedEmployees = notifications.filter((entry) => entry.type === "employee_invited").length;
   const hasAcceptedInvite = (employeeId: string) => inviteAcceptances.some((acceptance) => acceptance.employeeId === employeeId);
   const hasInviteSent = (employeeId: string) =>
     notifications.some((entry) => entry.type === "employee_invited" && entry.userId === employeeId);
@@ -700,19 +713,21 @@ export function TheScheduleApp({
     assignedPendingInviteShifts.length > 0 ? `${assignedPendingInviteShifts.length} shift${assignedPendingInviteShifts.length === 1 ? " is" : "s are"} assigned to invited employees.` : "",
     assignedConflictShifts.length > 0 ? `${assignedConflictShifts.length} assigned shift${assignedConflictShifts.length === 1 ? " conflicts" : "s conflict"} with submitted availability.` : ""
   ].filter(Boolean);
-  const uatItems = [
-    { label: "Invite employee", done: invitedEmployees > 0 },
-    { label: "Submit availability", done: schedulableSubmittedIds.size > 0 },
-    { label: "Submit no days", done: availability.some((submission) => submission.submittedAt && submission.unavailable.length === 0) },
-    { label: "Auto complete names", done: shifts.length > 0 && unassignedShifts.length === 0 },
-    { label: "Assign shifts", done: shifts.length > 0 && unassignedShifts.length === 0 },
-    { label: "Publish schedule", done: period.status === "published" },
-    { label: "Request coverage", done: coverage.length > 0 },
-    { label: "Test swap", done: swaps.length > 0 || swaps.some((swap) => swap.status === "approved") },
-    { label: "Accept invite", done: inviteAcceptances.length > 0 },
-    { label: "Resolve issue", done: uatIssues.length > 0 && resolvedUatIssues.length > 0 }
-  ];
-  const completedUatItems = uatItems.filter((item) => item.done).length;
+  const completedUatItems = UAT_CHECKLIST_ITEMS.filter((item) => uatChecklist[item.id] === "passed").length;
+  const failedUatItems = UAT_CHECKLIST_ITEMS.filter((item) => uatChecklist[item.id] === "failed").length;
+  const blockedUatItems = UAT_CHECKLIST_ITEMS.filter((item) => uatChecklist[item.id] === "blocked").length;
+  const normalizedUatSearch = uatSearch.trim().toLowerCase();
+  const filteredUatGroups = UAT_CHECKLIST_GROUPS.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => {
+      if (hidePassedUat && uatChecklist[item.id] === "passed") return false;
+      if (!normalizedUatSearch) return true;
+      return [group.title, group.description, item.title, item.actor, item.expected, ...item.steps]
+        .join(" ")
+        .toLowerCase()
+        .includes(normalizedUatSearch);
+    })
+  })).filter((group) => group.items.length > 0);
   const currentIdentity = mode === "manager" ? managerIdentity ?? activeEmployee : activeEmployee;
   const currentTheme: ThemePreference = preferences[currentIdentity?.id ?? "default"]?.theme ?? "light";
   const notificationPreviews = [
@@ -809,6 +824,7 @@ export function TheScheduleApp({
 
     function applyStoredState(stored: Partial<StoredTestState>) {
       const storedPeriod = stored.period ?? schedulePeriod;
+      if (stored.uatRunId) setUatRunId(stored.uatRunId);
       if (stored.people) {
         const hasSignedInPerson = stored.people.some((employee) => employee.email.toLowerCase() === currentUser.email);
         setPeople(
@@ -839,6 +855,7 @@ export function TheScheduleApp({
       if (stored.preferences) setPreferences(stored.preferences);
       if (stored.uatIssues) setUatIssues(stored.uatIssues);
       if (stored.inviteAcceptances) setInviteAcceptances(stored.inviteAcceptances);
+      if (stored.uatChecklist) setUatChecklist(stored.uatChecklist);
     }
 
     async function loadSavedState() {
@@ -880,6 +897,7 @@ export function TheScheduleApp({
     if (!hasLoadedStoredState) return;
 
     const snapshot: StoredTestState = {
+      uatRunId,
       people,
       period,
       shifts,
@@ -891,7 +909,8 @@ export function TheScheduleApp({
       availabilityDrafts,
       preferences,
       uatIssues,
-      inviteAcceptances
+      inviteAcceptances,
+      uatChecklist
     };
 
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
@@ -914,7 +933,7 @@ export function TheScheduleApp({
       });
 
     return () => controller.abort();
-  }, [auditLog, availability, availabilityDrafts, coverage, hasLoadedStoredState, inviteAcceptances, notifications, people, period, preferences, shifts, swaps, uatIssues]);
+  }, [auditLog, availability, availabilityDrafts, coverage, hasLoadedStoredState, inviteAcceptances, notifications, people, period, preferences, shifts, swaps, uatChecklist, uatIssues, uatRunId]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = currentTheme;
@@ -1027,6 +1046,56 @@ export function TheScheduleApp({
     link.download = filename;
     link.click();
     URL.revokeObjectURL(url);
+  }
+
+  function setUatCheckStatus(itemId: string, status: UatCheckStatus) {
+    setUatChecklist((current) => {
+      if (status === "not_run") {
+        const next = { ...current };
+        delete next[itemId];
+        return next;
+      }
+      return { ...current, [itemId]: status };
+    });
+  }
+
+  function exportUatChecklist(format: "csv" | "json") {
+    const rows = UAT_CHECKLIST_GROUPS.flatMap((group) =>
+      group.items.map((item) => ({
+        group: group.title,
+        id: item.id,
+        title: item.title,
+        actor: item.actor,
+        status: uatChecklist[item.id] ?? "not_run",
+        critical: Boolean(item.critical),
+        cleanRunRecommended: Boolean(item.cleanRunRecommended),
+        steps: item.steps,
+        expected: item.expected
+      }))
+    );
+    const content =
+      format === "json"
+        ? JSON.stringify({ exportedAt: new Date().toISOString(), results: rows }, null, 2)
+        : [
+            ["Group", "ID", "Test", "Actor", "Status", "Critical", "Clean run recommended", "Steps", "Expected result"],
+            ...rows.map((row) => [
+              row.group,
+              row.id,
+              row.title,
+              row.actor,
+              row.status,
+              row.critical ? "Yes" : "No",
+              row.cleanRunRecommended ? "Yes" : "No",
+              row.steps.map((step, index) => `${index + 1}. ${step}`).join(" "),
+              row.expected
+            ])
+          ]
+            .map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(","))
+            .join("\n");
+    downloadBlob(
+      new Blob([content], { type: format === "json" ? "application/json" : "text/csv;charset=utf-8" }),
+      `the-schedule-production-uat.${format}`
+    );
   }
 
   function acceptInviteForActiveEmployee() {
@@ -2155,6 +2224,7 @@ export function TheScheduleApp({
     if (!isManager) return;
     setMode("manager");
     setActiveTab("dashboard");
+    setUatRunId(DEFAULT_UAT_RUN_ID);
     setPeople(employees);
     setPeriod(schedulePeriod);
     setShifts(generateDefaultShifts(schedulePeriod));
@@ -2166,6 +2236,7 @@ export function TheScheduleApp({
     setAvailabilityDrafts({});
     setUatIssues([]);
     setInviteAcceptances([]);
+    setUatChecklist({});
     setSelectedShiftId(null);
     setShowOnlyUnassigned(false);
     setShowIssueReporter(false);
@@ -2179,6 +2250,34 @@ export function TheScheduleApp({
         setPersistenceStatus("saved");
       })
       .catch(() => setPersistenceStatus("local"));
+  }
+
+  async function resetProductionUatRun() {
+    if (!isManager || cleanResetConfirmation !== CLEAN_RUN_CONFIRMATION) return;
+    const confirmed = window.confirm(
+      "This will erase the production UAT run, all invitation/notification history, and every test account's Google link and session. Continue?"
+    );
+    if (!confirmed) return;
+
+    setCleanResetStatus("resetting");
+    setHasLoadedStoredState(false);
+    try {
+      const response = await fetch("/api/uat/reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmation: cleanResetConfirmation })
+      });
+      const result = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(result.error ?? "Unable to reset production UAT.");
+
+      window.localStorage.removeItem(STORAGE_KEY);
+      window.localStorage.removeItem("the-schedule-theme");
+      window.location.assign("/?reset=complete");
+    } catch (error) {
+      setCleanResetStatus("error");
+      setHasLoadedStoredState(true);
+      window.alert(error instanceof Error ? error.message : "Unable to reset production UAT.");
+    }
   }
 
   function applyScenarioPreset(preset: ScenarioPreset) {
@@ -2233,6 +2332,7 @@ export function TheScheduleApp({
     setAvailabilityDrafts({});
     setUatIssues([]);
     setInviteAcceptances(presetInviteAcceptances);
+    setUatChecklist({});
     setSelectedShiftId(nextShifts[0]?.id ?? null);
     setShowOnlyUnassigned(false);
     setShowIssueReporter(false);
@@ -2247,6 +2347,7 @@ export function TheScheduleApp({
     { id: "builder", label: "Builder", icon: <Plus size={16} /> },
     { id: "requests", label: "Requests", icon: <Repeat2 size={16} /> },
     { id: "reports", label: "Reports", icon: <FileText size={16} /> },
+    { id: "uat-plan", label: "Test Plan", icon: <Check size={16} /> },
     { id: "issues", label: "UAT Issues", icon: <ClipboardList size={16} /> },
     { id: "notifications", label: "Notifications", icon: <Mail size={16} /> },
     { id: "settings", label: "Settings", icon: <Settings size={16} /> }
@@ -2550,25 +2651,20 @@ export function TheScheduleApp({
               <Metric label="Draft shifts" value={String(shifts.length)} detail={shifts.length ? "Ready for assignment" : "Generate from templates"} />
             </div>
 
-            <Section title="UAT Checks" icon={<Check size={18} />}>
-              <div className="grid gap-4 lg:grid-cols-[260px_1fr]">
-                <div className="rounded-lg border border-line bg-paper p-4">
-                  <div className="text-xs font-semibold uppercase tracking-normal text-ink/55">Progress</div>
-                  <div className="mt-2 text-3xl font-black">
-                    {completedUatItems}/{uatItems.length}
-                  </div>
-                  <div className="mt-1 text-sm text-ink/60">Manual test pass</div>
-                </div>
-                <div className="grid gap-2 md:grid-cols-2">
-                  {uatItems.map((item) => (
-                    <div key={item.label} className="flex items-center gap-2 rounded-lg border border-line p-3">
-                      <span className={cx("grid size-7 shrink-0 place-items-center rounded-md", item.done ? "bg-approve text-white" : "bg-paper text-ink/45")}>
-                        <Check size={15} />
-                      </span>
-                      <span className={cx("text-sm font-semibold", item.done ? "text-ink" : "text-ink/55")}>{item.label}</span>
-                    </div>
-                  ))}
-                </div>
+            <Section
+              title="Production UAT Plan"
+              icon={<Check size={18} />}
+              action={
+                <Button variant="secondary" onClick={() => setActiveTab("uat-plan")}>
+                  Open all tests
+                </Button>
+              }
+            >
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <Metric label="Passed" value={`${completedUatItems}/${UAT_CHECKLIST_ITEMS.length}`} detail="Manually verified" tone={completedUatItems === UAT_CHECKLIST_ITEMS.length ? "good" : "neutral"} />
+                <Metric label="Failed" value={String(failedUatItems)} detail="Log and retest" tone={failedUatItems ? "warn" : "good"} />
+                <Metric label="Blocked" value={String(blockedUatItems)} detail="Needs setup or dependency" tone={blockedUatItems ? "warn" : "good"} />
+                <Metric label="Not run" value={String(UAT_CHECKLIST_ITEMS.length - completedUatItems - failedUatItems - blockedUatItems)} detail={`${UAT_CHECKLIST_GROUPS.length} test groups`} />
               </div>
             </Section>
 
@@ -3214,6 +3310,188 @@ export function TheScheduleApp({
                 })}
               </div>
             </Section>
+          </div>
+        )}
+
+        {activeTab === "uat-plan" && mode === "manager" && (
+          <div className="grid gap-4">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <Metric label="Passed" value={`${completedUatItems}/${UAT_CHECKLIST_ITEMS.length}`} detail="Manually verified" tone={completedUatItems === UAT_CHECKLIST_ITEMS.length ? "good" : "neutral"} />
+              <Metric label="Failed" value={String(failedUatItems)} detail="Open an issue and retest" tone={failedUatItems ? "warn" : "good"} />
+              <Metric label="Blocked" value={String(blockedUatItems)} detail="Dependency or setup needed" tone={blockedUatItems ? "warn" : "good"} />
+              <Metric label="Not run" value={String(UAT_CHECKLIST_ITEMS.length - completedUatItems - failedUatItems - blockedUatItems)} detail={`${UAT_CHECKLIST_GROUPS.length} production areas`} />
+            </div>
+
+            <Section
+              title="Checklist controls"
+              icon={<ClipboardList size={18} />}
+              action={
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="secondary" onClick={() => exportUatChecklist("csv")}>
+                    <Download size={16} />
+                    CSV
+                  </Button>
+                  <Button variant="secondary" onClick={() => exportUatChecklist("json")}>
+                    <Download size={16} />
+                    JSON
+                  </Button>
+                </div>
+              }
+            >
+              <div className="grid gap-3 lg:grid-cols-[1fr_auto_auto] lg:items-end">
+                <Field label="Search test flows">
+                  <input
+                    className={inputBase}
+                    value={uatSearch}
+                    onChange={(event) => setUatSearch(event.target.value)}
+                    placeholder="Authentication, coverage, expired invite..."
+                  />
+                </Field>
+                <label className="flex h-9 items-center gap-2 rounded-md border border-line bg-white px-3 text-sm font-semibold">
+                  <input type="checkbox" checked={hidePassedUat} onChange={(event) => setHidePassedUat(event.target.checked)} />
+                  Hide passed
+                </label>
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    if (window.confirm("Clear every checklist result? This does not reset application data.")) setUatChecklist({});
+                  }}
+                  disabled={Object.keys(uatChecklist).length === 0}
+                >
+                  <RefreshCw size={16} />
+                  Clear results
+                </Button>
+              </div>
+            </Section>
+
+            <Section title="Clean production UAT run" icon={<RefreshCw size={18} />}>
+              <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+                <div className="rounded-lg border border-warn bg-warn/10 p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="mt-0.5 shrink-0 text-warn" size={20} />
+                    <div>
+                      <div className="font-black">This is a destructive production reset.</div>
+                      <p className="mt-2 text-sm leading-6 text-ink/70">
+                        It clears the workspace, checklist, invitations, normalized schedule data, notification deduplication,
+                        audit logs, Google account links, and active sessions. The store, configuration, and four seeded test
+                        identities/memberships are restored so every account can exercise first login again.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <div className="grid content-start gap-3 rounded-lg border border-line p-4">
+                  <Field label={`Type ${CLEAN_RUN_CONFIRMATION} to enable`}>
+                    <input
+                      className={inputBase}
+                      value={cleanResetConfirmation}
+                      onChange={(event) => {
+                        setCleanResetConfirmation(event.target.value);
+                        setCleanResetStatus("idle");
+                      }}
+                      autoComplete="off"
+                    />
+                  </Field>
+                  <Button
+                    variant="danger"
+                    onClick={() => void resetProductionUatRun()}
+                    disabled={cleanResetConfirmation !== CLEAN_RUN_CONFIRMATION || cleanResetStatus === "resetting"}
+                  >
+                    <RefreshCw size={16} />
+                    {cleanResetStatus === "resetting" ? "Resetting and signing everyone out" : "Start a clean production run"}
+                  </Button>
+                  {cleanResetStatus === "error" && (
+                    <div className="text-sm font-semibold text-red-700">Reset failed. No success was assumed; review the alert and retry.</div>
+                  )}
+                </div>
+              </div>
+            </Section>
+
+            {filteredUatGroups.length === 0 && (
+              <div className="rounded-lg border border-dashed border-line bg-white p-8 text-center text-sm font-semibold text-ink/55">
+                No test flows match the current filters.
+              </div>
+            )}
+
+            {filteredUatGroups.map((group) => {
+              const groupPassed = group.items.filter((item) => uatChecklist[item.id] === "passed").length;
+              return (
+                <details key={group.id} className="rounded-lg border border-line bg-white shadow-panel" open={normalizedUatSearch ? true : undefined}>
+                  <summary className="cursor-pointer list-none px-4 py-4 marker:hidden">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <h2 className="font-black">{group.title}</h2>
+                        <p className="mt-1 text-sm text-ink/60">{group.description}</p>
+                      </div>
+                      <Badge tone={groupPassed === group.items.length ? "good" : "neutral"}>{groupPassed}/{group.items.length} passed</Badge>
+                    </div>
+                  </summary>
+                  <div className="grid gap-3 border-t border-line p-4">
+                    {group.items.map((item) => {
+                      const status = uatChecklist[item.id] ?? "not_run";
+                      return (
+                        <article
+                          key={item.id}
+                          className={cx(
+                            "rounded-lg border p-4",
+                            status === "passed" && "border-approve/30 bg-approve/5",
+                            status === "failed" && "border-red-500/40 bg-red-500/5",
+                            status === "blocked" && "border-warn bg-warn/5",
+                            status === "not_run" && "border-line"
+                          )}
+                        >
+                          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <h3 className="font-black">{item.title}</h3>
+                                <Badge>{item.actor}</Badge>
+                                {item.critical && <Badge tone="warn">Critical</Badge>}
+                                {item.cleanRunRecommended && <Badge>Clean run</Badge>}
+                              </div>
+                              <div className="mt-3 text-xs font-semibold uppercase tracking-normal text-ink/50">Steps</div>
+                              <ol className="mt-2 grid gap-1 pl-5 text-sm leading-6 text-ink/70">
+                                {item.steps.map((step) => (
+                                  <li key={step} className="list-decimal">{step}</li>
+                                ))}
+                              </ol>
+                              <div className="mt-3 rounded-md bg-paper p-3 text-sm leading-6">
+                                <span className="font-black">Expected: </span>
+                                {item.expected}
+                              </div>
+                            </div>
+                            <div className="grid shrink-0 gap-2 lg:w-48">
+                              <Field label="Result">
+                                <select
+                                  className={inputBase}
+                                  value={status}
+                                  onChange={(event) => setUatCheckStatus(item.id, event.target.value as UatCheckStatus)}
+                                >
+                                  <option value="not_run">Not run</option>
+                                  <option value="passed">Passed</option>
+                                  <option value="failed">Failed</option>
+                                  <option value="blocked">Blocked</option>
+                                </select>
+                              </Field>
+                              {status === "failed" && (
+                                <Button
+                                  variant="secondary"
+                                  onClick={() => {
+                                    setIssueForm({ category: "other", note: `Failed ${item.id} - ${item.title}: ` });
+                                    setShowIssueReporter(true);
+                                  }}
+                                >
+                                  <ClipboardList size={16} />
+                                  Log issue
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                </details>
+              );
+            })}
           </div>
         )}
 

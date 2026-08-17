@@ -21,6 +21,8 @@ The current product goal is hosted, authenticated UAT with Google identities and
 - `src/lib/demo-data.ts` holds seeded business data, scheduling helpers, availability conflict logic, hours calculations, and notification/log types.
 - `src/lib/test-state-shared.ts` defines the persisted JSON test-state contract used by the client and API route.
 - `src/lib/test-state.ts` normalizes the JSON-backed test-state payload.
+- `src/lib/uat-checklist.ts` defines the 105-flow production UAT plan and validates persisted manual results.
+- `src/lib/uat-reset.ts` performs the manager-only clean-run reset, restores seeded identities, clears OAuth/session and UAT artifacts, and creates a new run identifier.
 - `src/lib/auth.ts` configures Google/Auth.js and permits verified Google identities to link to pre-seeded or invited user records on first login.
 - `src/lib/access.ts` resolves the signed-in Google account to an active Neon store membership.
 - `src/lib/workspace-state.ts` persists and role-filters the shared schedule workspace in Neon.
@@ -52,7 +54,7 @@ npm run build
 
 The dev app usually runs at `http://127.0.0.1:3000`. If `npm run build` leaves the dev server returning 500s, stop the dev server, clear `.next`, and restart `npm run dev -- --hostname 127.0.0.1 --port 3000`.
 
-Starting the development server does not reset Neon. Use the manager-only reset control in development when a clean UAT workspace is intentionally required.
+Starting the development server does not reset Neon. Use the manager-only `Test Plan` clean-run control only when a deliberately destructive first-login UAT restart is required; development scenario presets remain available for non-destructive local setup.
 
 ## UAT Flow To Preserve
 
@@ -90,7 +92,8 @@ Important UX expectations from the user:
 
 - Test-mode scenario buttons: Fresh pre-release, Availability submitted, Draft generated, Published.
 - Server-backed test persistence through `/api/test-state`, with browser localStorage fallback.
-- Manager UAT checklist.
+- Production-visible 105-flow manager UAT plan with manual status tracking, filtering, and CSV/JSON export.
+- Manager-only clean-run reset for first-login retesting, guarded by typed confirmation and stale-run write rejection.
 - UAT issue tracker and exports.
 - Notification preview center and notification log.
 - Owner alerts for reported UAT issues, notification delivery failures, and notification API outages.

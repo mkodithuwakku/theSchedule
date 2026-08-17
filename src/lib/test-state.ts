@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
+  type SchedulePeriod,
   type AuditEntry,
   type NotificationEntry,
   employees,
@@ -8,7 +9,9 @@ import {
   initialAuditLog,
   schedulePeriod
 } from "@/lib/demo-data";
-import { TEST_TODAY, type StoredTestState } from "@/lib/test-state-shared";
+import { addIsoDays, dateInTimeZone } from "@/lib/schedule-rollout";
+import { DEFAULT_UAT_RUN_ID, TEST_TODAY, type StoredTestState } from "@/lib/test-state-shared";
+import { normalizeUatChecklistProgress } from "@/lib/uat-checklist";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const TEST_STATE_FILE = path.join(DATA_DIR, "test-state.json");
@@ -35,7 +38,7 @@ export function isTestStateWriteUnavailable(error: unknown) {
   );
 }
 
-export function createDefaultTestState(): StoredTestState {
+export function createDefaultTestState(uatRunId = DEFAULT_UAT_RUN_ID): StoredTestState {
   const defaultAuditLog: AuditEntry[] = [
     {
       ...initialAuditLog[0],
@@ -44,6 +47,7 @@ export function createDefaultTestState(): StoredTestState {
   ];
 
   return {
+    uatRunId,
     people: clone(employees),
     period: clone(schedulePeriod),
     shifts: clone(generateDefaultShifts(schedulePeriod)),
@@ -55,7 +59,51 @@ export function createDefaultTestState(): StoredTestState {
     availabilityDrafts: {},
     preferences: {},
     uatIssues: [],
-    inviteAcceptances: []
+    inviteAcceptances: [],
+    uatChecklist: {}
+  };
+}
+
+function cleanRunPeriod(now: Date): SchedulePeriod {
+  const availabilityOpenAt = dateInTimeZone(now, "America/Edmonton");
+  const availabilityDeadlineAt = addIsoDays(availabilityOpenAt, 5);
+  const releaseDate = addIsoDays(availabilityOpenAt, 7);
+  const startDate = addIsoDays(releaseDate, 1);
+  const endDate = addIsoDays(startDate, 16);
+  const label = (value: string) =>
+    new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" })
+      .format(new Date(`${value}T12:00:00.000Z`));
+
+  return {
+    id: `period_${startDate.replaceAll("-", "")}_${endDate.replaceAll("-", "")}`,
+    name: `${label(startDate)} - ${label(endDate)}`,
+    startDate,
+    endDate,
+    releaseDate,
+    availabilityOpenAt,
+    availabilityDeadlineAt,
+    status: "draft"
+  };
+}
+
+export function createCleanRunTestState(uatRunId: string, now = new Date()): StoredTestState {
+  const period = cleanRunPeriod(now);
+  const state = createDefaultTestState(uatRunId);
+  return {
+    ...state,
+    period,
+    shifts: generateDefaultShifts(period),
+    auditLog: [
+      {
+        id: `audit_clean_${uatRunId}`,
+        actorId: "emp_manager",
+        action: "uat_run_created",
+        entityType: "SchedulePeriod",
+        entityId: period.id,
+        summary: `Clean production UAT run opened for ${period.name}.`,
+        createdAt: now.toISOString()
+      }
+    ]
   };
 }
 
@@ -63,6 +111,7 @@ export function normalizeTestState(candidate: Partial<StoredTestState>): StoredT
   const defaults = createDefaultTestState();
 
   return {
+    uatRunId: typeof candidate.uatRunId === "string" && candidate.uatRunId.trim() ? candidate.uatRunId : defaults.uatRunId,
     people: Array.isArray(candidate.people) ? candidate.people : defaults.people,
     period: candidate.period ?? defaults.period,
     shifts: Array.isArray(candidate.shifts) ? candidate.shifts : defaults.shifts,
@@ -74,7 +123,8 @@ export function normalizeTestState(candidate: Partial<StoredTestState>): StoredT
     availabilityDrafts: candidate.availabilityDrafts ?? defaults.availabilityDrafts,
     preferences: candidate.preferences ?? defaults.preferences,
     uatIssues: Array.isArray(candidate.uatIssues) ? candidate.uatIssues : defaults.uatIssues,
-    inviteAcceptances: Array.isArray(candidate.inviteAcceptances) ? candidate.inviteAcceptances : defaults.inviteAcceptances
+    inviteAcceptances: Array.isArray(candidate.inviteAcceptances) ? candidate.inviteAcceptances : defaults.inviteAcceptances,
+    uatChecklist: normalizeUatChecklistProgress(candidate.uatChecklist)
   };
 }
 

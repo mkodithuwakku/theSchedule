@@ -4,6 +4,7 @@ import {
   authorizeEmployeeStateUpdate,
   readWorkspaceState,
   resetWorkspaceState,
+  StaleUatRunError,
   writeWorkspaceState
 } from "@/lib/workspace-state";
 
@@ -31,6 +32,12 @@ export async function PUT(request: Request) {
 
   const proposed = await request.json();
   const existing = await readWorkspaceState(access.storeId);
+  if (proposed?.uatRunId !== existing.uatRunId) {
+    return NextResponse.json(
+      { error: "This browser belongs to an older UAT run. Refresh before saving." },
+      { status: 409 }
+    );
+  }
   let nextState = proposed;
 
   if (access.role === "employee") {
@@ -39,7 +46,15 @@ export async function PUT(request: Request) {
     nextState = authorizeEmployeeStateUpdate(existing, proposed, employee.id);
   }
 
-  const savedState = await writeWorkspaceState(access.storeId, nextState);
+  let savedState;
+  try {
+    savedState = await writeWorkspaceState(access.storeId, nextState);
+  } catch (error) {
+    if (error instanceof StaleUatRunError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
+    throw error;
+  }
   return NextResponse.json(savedState, {
     headers: { "X-Test-State-Persisted": "true" }
   });

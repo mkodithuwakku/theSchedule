@@ -7,30 +7,74 @@ function jsonValue<T>(value: T) {
   return JSON.parse(JSON.stringify(value));
 }
 
+export class StaleUatRunError extends Error {
+  constructor() {
+    super("This browser belongs to an older UAT run. Refresh before saving.");
+    this.name = "StaleUatRunError";
+  }
+}
+
 export async function readWorkspaceState(storeId: string): Promise<StoredTestState> {
   const record = await prisma.storeWorkspaceState.findUnique({ where: { storeId } });
   if (!record) return createDefaultTestState();
-  return normalizeTestState(record.data as Partial<StoredTestState>);
+  const rawState = record.data as Partial<StoredTestState>;
+  const normalized = normalizeTestState(rawState);
+  if (!rawState.uatRunId) {
+    await prisma.storeWorkspaceState.update({
+      where: { storeId },
+      data: { data: jsonValue(normalized) }
+    });
+  }
+  return normalized;
 }
 
 export async function writeWorkspaceState(storeId: string, state: Partial<StoredTestState>) {
   const normalized = normalizeTestState(state);
-  await prisma.storeWorkspaceState.upsert({
+  const existing = await prisma.storeWorkspaceState.findUnique({
     where: { storeId },
-    update: {
+    select: { storeId: true }
+  });
+  if (!existing) {
+    await prisma.storeWorkspaceState.create({
+      data: {
+        storeId,
+        data: jsonValue(normalized)
+      }
+    });
+    return normalized;
+  }
+
+  const updated = await prisma.storeWorkspaceState.updateMany({
+    where: {
+      storeId,
+      data: {
+        path: ["uatRunId"],
+        equals: normalized.uatRunId
+      }
+    },
+    data: {
       data: jsonValue(normalized),
       version: { increment: 1 }
-    },
-    create: {
-      storeId,
-      data: jsonValue(normalized)
     }
   });
+  if (updated.count === 0) throw new StaleUatRunError();
   return normalized;
 }
 
 export async function resetWorkspaceState(storeId: string) {
-  return writeWorkspaceState(storeId, createDefaultTestState());
+  const cleanState = createDefaultTestState();
+  await prisma.storeWorkspaceState.upsert({
+    where: { storeId },
+    update: {
+      data: jsonValue(cleanState),
+      version: { increment: 1 }
+    },
+    create: {
+      storeId,
+      data: jsonValue(cleanState)
+    }
+  });
+  return cleanState;
 }
 
 function sameCoreCoverage(left: CoverageRequest, right: CoverageRequest) {

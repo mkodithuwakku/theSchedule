@@ -32,6 +32,8 @@ test("employee updates keep manager-controlled schedule fields unchanged", () =>
   proposed.people[0].name = "Changed by employee";
   proposed.period.status = "published";
   proposed.shifts = [];
+  proposed.uatRunId = "forged_run";
+  proposed.uatChecklist["auth-manager-first-login"] = "passed";
   proposed.inviteAcceptances = [
     {
       id: "fake_acceptance",
@@ -47,7 +49,9 @@ test("employee updates keep manager-controlled schedule fields unchanged", () =>
   assert.deepEqual(result.people, state.people);
   assert.deepEqual(result.period, state.period);
   assert.deepEqual(result.shifts, state.shifts);
+  assert.equal(result.uatRunId, state.uatRunId);
   assert.deepEqual(result.inviteAcceptances, state.inviteAcceptances);
+  assert.deepEqual(result.uatChecklist, state.uatChecklist);
 });
 
 test("employee can save only their own availability, draft, and theme", () => {

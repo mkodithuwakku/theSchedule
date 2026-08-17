@@ -9,9 +9,11 @@ import type {
   SwapRequest,
   Unavailability
 } from "@/lib/demo-data";
+import type { UatCheckStatus } from "@/lib/uat-checklist";
 
 export const TEST_TODAY = "July 6, 2026";
 export const STORAGE_KEY = "the-schedule-test-state-v1";
+export const DEFAULT_UAT_RUN_ID = "uat_initial";
 
 export type ThemePreference = "light" | "dark";
 
@@ -54,6 +56,7 @@ export type InviteAcceptance = {
 };
 
 export type StoredTestState = {
+  uatRunId: string;
   people: Employee[];
   period: SchedulePeriod;
   shifts: Shift[];
@@ -66,4 +69,5 @@ export type StoredTestState = {
   preferences: Record<string, UserPreference>;
   uatIssues: UatIssue[];
   inviteAcceptances: InviteAcceptance[];
+  uatChecklist: Record<string, UatCheckStatus>;
 };
