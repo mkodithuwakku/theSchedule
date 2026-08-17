@@ -43,12 +43,14 @@ test("daily backup freshness follows the Edmonton calendar day", () => {
   assert.equal(isWorkspaceBackupCurrentForDay(lateEvening, afterLocalMidnight), false);
 });
 
-test("automatic saves preserve only a same-day pre-reset recovery point", () => {
+test("automatic saves preserve same-day manual and pre-reset recovery points", () => {
   const backedUpAt = new Date("2026-08-18T05:30:00.000Z");
 
   assert.equal(shouldPreserveBackupAfterSave({ reason: "pre_reset", backedUpAt }, new Date("2026-08-18T05:59:59.000Z")), true);
+  assert.equal(shouldPreserveBackupAfterSave({ reason: "manual", backedUpAt }, new Date("2026-08-18T05:59:59.000Z")), true);
   assert.equal(shouldPreserveBackupAfterSave({ reason: "daily", backedUpAt }, new Date("2026-08-18T05:59:59.000Z")), false);
   assert.equal(shouldPreserveBackupAfterSave({ reason: "pre_reset", backedUpAt }, new Date("2026-08-18T06:00:00.000Z")), false);
+  assert.equal(shouldPreserveBackupAfterSave({ reason: "manual", backedUpAt }, new Date("2026-08-18T06:00:00.000Z")), false);
 });
 
 test("restore requires the exact guarded confirmation phrase", () => {

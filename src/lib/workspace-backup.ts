@@ -41,7 +41,7 @@ export function shouldPreserveBackupAfterSave(
   now: Date
 ) {
   return Boolean(
-    backup?.reason === "pre_reset" &&
+    (backup?.reason === "pre_reset" || backup?.reason === "manual") &&
     isWorkspaceBackupCurrentForDay(backup.backedUpAt, now)
   );
 }
