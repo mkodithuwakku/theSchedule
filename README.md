@@ -2,9 +2,11 @@
 
 Responsive web MVP for replacing a store's Excel and paper scheduling workflow.
 
+The complete project documentation starts at [`docs/README.md`](./docs/README.md). It links to the architecture, API reference, manager/employee user guide, full UAT and day-progression runbook, and production deployment/backup/recovery operations guide.
+
 For future Codex sessions, start with [`CODEX_CONTEXT.md`](./CODEX_CONTEXT.md). It is the dedicated project handoff with current architecture, UAT flow, user preferences, and next likely work.
 
-For hosted UAT setup, use [`PRODUCTION_SETUP.md`](./PRODUCTION_SETUP.md). It covers public URL, database, Google OAuth, Resend email, invite acceptance, and what to ask the manager for domain/payment setup.
+For hosted UAT setup, use [`docs/OPERATIONS.md`](./docs/OPERATIONS.md) as the maintained operations runbook. [`PRODUCTION_SETUP.md`](./PRODUCTION_SETUP.md) remains the concise initial hosting and manager domain/payment handoff.
 
 The app is based on the uploaded Store Scheduler SRS and includes:
 

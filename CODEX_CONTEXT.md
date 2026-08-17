@@ -44,6 +44,7 @@ The current product goal is hosted, authenticated UAT with Google identities and
 - `public/men-are-from-mars-logo.png` is the current store logo asset.
 - `README.md` is the user-facing project overview and setup guide.
 - `PRODUCTION_SETUP.md` is the hosted UAT checklist and manager domain/payment handoff.
+- `docs/README.md` is the documentation index. Its architecture, API, user, UAT, and operations guides are the maintained project reference and should be updated with relevant behavior changes.
 
 ## Local Commands
 

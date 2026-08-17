@@ -2,6 +2,8 @@
 
 This is the checklist for hosting The Schedule on a real HTTPS URL so invite links work from phones and other devices.
 
+For the maintained, detailed production runbook—including migrations, deployment verification, backup policy, restore drills, incident triage, and rollback—use [`docs/OPERATIONS.md`](./docs/OPERATIONS.md). For the complete manual application journey and recurring day-progression test, use [`docs/TESTING_UAT.md`](./docs/TESTING_UAT.md).
+
 ## What Is Now Wired
 
 - Prisma/Postgres schema for users, stores, memberships, schedule periods, availability, shifts, invites, notifications, and audit logs.
