@@ -14,7 +14,10 @@ export const authOptions: NextAuthOptions = {
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID ?? "",
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? ""
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
+      // Seeded and invited users already exist before their first Google login.
+      // Google verifies the email, so link that OAuth identity to the approved user.
+      allowDangerousEmailAccountLinking: true
     })
   ],
   callbacks: {

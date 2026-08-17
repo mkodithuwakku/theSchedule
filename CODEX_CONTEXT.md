@@ -21,10 +21,15 @@ The current product goal is hosted, authenticated UAT with Google identities and
 - `src/lib/demo-data.ts` holds seeded business data, scheduling helpers, availability conflict logic, hours calculations, and notification/log types.
 - `src/lib/test-state-shared.ts` defines the persisted JSON test-state contract used by the client and API route.
 - `src/lib/test-state.ts` normalizes the JSON-backed test-state payload.
+- `src/lib/auth.ts` configures Google/Auth.js and permits verified Google identities to link to pre-seeded or invited user records on first login.
 - `src/lib/access.ts` resolves the signed-in Google account to an active Neon store membership.
 - `src/lib/workspace-state.ts` persists and role-filters the shared schedule workspace in Neon.
 - `src/app/api/test-state/route.ts` requires authentication, allows managers full writes, and sanitizes employee writes to their own permitted workflow data.
 - `src/app/api/notifications/test-email/route.ts` handles test notification sends/logging.
+- `src/app/api/cron/schedule-rollout/route.ts` is the `CRON_SECRET`-protected daily Vercel job that sends availability requests three Edmonton calendar days before release.
+- `src/app/api/schedule/publish/route.ts` is the manager-only publication path that persists publication and sends one consolidated schedule email per active member.
+- `src/lib/schedule-rollout.ts` contains pure Edmonton date, recipient, consolidation, and retry-deduplication planning logic.
+- `src/lib/schedule-notifications.ts` connects rollout plans to Prisma notification claims and Resend delivery.
 - `src/app/api/invites/route.ts` creates production invite records and sends invite emails.
 - `src/app/api/invites/accept/route.ts` lets invited employees accept a token after Google sign-in.
 - `src/lib/email.ts` wraps email delivery and defines the owner alert email fallback. Without `RESEND_API_KEY`, notifications safely return queued/logged behavior.
@@ -91,6 +96,8 @@ Important UX expectations from the user:
 - Owner alerts for reported UAT issues, notification delivery failures, and notification API outages.
 - Publish confirmation screen before final publish.
 - Mobile employee quick actions.
+- Database-deduplicated availability reminder emails three days before release.
+- Consolidated schedule publication emails with Resend provider IDs and failure reasons in `NotificationLog`.
 
 ## Future Expansion Notes
 
@@ -106,6 +113,7 @@ Multi-store support is planned but not active yet. When it is added:
 
 Before broader real-user UAT:
 
+- Confirm `CRON_SECRET` is present in Vercel Production before relying on the scheduled rollout route.
 - Replace whole-workspace autosaves with normalized Prisma route handlers/server actions and database transactions. This prevents stale manager and employee browser snapshots from overwriting each other.
 - Add browser-level authentication tests for signed-out, uninvited, inactive, employee, and manager accounts; the current unit suite covers employee state-write authorization.
 - Add manager-controlled activate/deactivate and promote/demote controls backed by `StoreMembership`, with audit logging and protection against removing the final active manager.

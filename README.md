@@ -118,11 +118,13 @@ Set:
 RESEND_API_KEY=""
 EMAIL_FROM="The Schedule <schedule@your-domain.com>"
 OWNER_ALERT_EMAIL="m.kodithuwakku803@gmail.com"
+CRON_SECRET="replace-with-a-long-random-secret"
 ```
 
 Email helpers return `queued` when Resend is not configured, which keeps development safe while preserving notification log semantics.
 The manager header and Settings screen include a test email action. Without `RESEND_API_KEY`, the app logs notifications as queued; with Resend configured, the same action attempts a real send.
-Action notifications are queued for employee invites, availability submissions, draft generation, shift assignment/removal, schedule publishing, coverage requests/offers/approvals, and swap requests/responses/approvals.
+The secured Vercel Cron route runs daily and sends one availability request to every active store member exactly three Edmonton calendar days before the schedule release date. `CRON_SECRET` authorizes that route.
+Publishing sends one consolidated email per active member, including all assigned shifts and a link to the hosted application. Notification logs store deterministic deduplication keys, Resend delivery IDs, queued/sent/failed status, and failure reasons.
 Reported UAT issues and notification delivery failures are sent to the owner alert email, defaulting to `m.kodithuwakku803@gmail.com`. Real delivery still requires `RESEND_API_KEY`; otherwise those owner alerts are recorded as queued.
 
 For hosted testing, set `NEXT_PUBLIC_APP_URL` and `NEXTAUTH_URL` to the public HTTPS app URL so invite links work from phones and other devices.

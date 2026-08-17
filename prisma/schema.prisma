@@ -69,8 +69,8 @@ model User {
   notifications       NotificationLog[]
   auditLogs           AuditLog[]
   shiftSnapshots      ShiftSnapshot[]
-  invitationsSent     StoreInvitation[]         @relation("InvitationsSent")
-  invitationsAccepted StoreInvitation[]         @relation("InvitationsAccepted")
+  invitationsSent     StoreInvitation[]        @relation("InvitationsSent")
+  invitationsAccepted StoreInvitation[]        @relation("InvitationsAccepted")
   createdAt           DateTime                 @default(now())
   updatedAt           DateTime                 @updatedAt
 }
@@ -110,23 +110,23 @@ model VerificationToken {
 }
 
 model Store {
-  id                  String             @id @default(cuid())
-  name                String
-  timezone            String             @default("America/Edmonton")
-  releaseDays         Int[]              @default([14, 31])
-  availabilityOpenDays Int               @default(5)
-  availabilityDeadlineDays Int           @default(2)
-  memberships         StoreMembership[]
-  periods             SchedulePeriod[]
-  shifts              Shift[]
-  templates           ShiftTemplate[]
-  storeHours          StoreHours[]
-  invitations         StoreInvitation[]
-  notifications       NotificationLog[]
-  auditLogs           AuditLog[]
-  workspaceState      StoreWorkspaceState?
-  createdAt           DateTime           @default(now())
-  updatedAt           DateTime           @updatedAt
+  id                       String               @id @default(cuid())
+  name                     String
+  timezone                 String               @default("America/Edmonton")
+  releaseDays              Int[]                @default([14, 31])
+  availabilityOpenDays     Int                  @default(5)
+  availabilityDeadlineDays Int                  @default(2)
+  memberships              StoreMembership[]
+  periods                  SchedulePeriod[]
+  shifts                   Shift[]
+  templates                ShiftTemplate[]
+  storeHours               StoreHours[]
+  invitations              StoreInvitation[]
+  notifications            NotificationLog[]
+  auditLogs                AuditLog[]
+  workspaceState           StoreWorkspaceState?
+  createdAt                DateTime             @default(now())
+  updatedAt                DateTime             @updatedAt
 }
 
 model StoreWorkspaceState {
@@ -222,7 +222,7 @@ model UnavailableDay {
 }
 
 model Shift {
-  id               String             @id @default(cuid())
+  id               String            @id @default(cuid())
   schedulePeriodId String
   storeId          String
   date             DateTime
@@ -231,26 +231,26 @@ model Shift {
   employeeId       String?
   roleLabel        String?
   notes            String?
-  schedulePeriod   SchedulePeriod     @relation(fields: [schedulePeriodId], references: [id], onDelete: Cascade)
-  store            Store              @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  employee         User?              @relation(fields: [employeeId], references: [id])
+  schedulePeriod   SchedulePeriod    @relation(fields: [schedulePeriodId], references: [id], onDelete: Cascade)
+  store            Store             @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  employee         User?             @relation(fields: [employeeId], references: [id])
   coverageRequests CoverageRequest[]
-  swapAsRequester  SwapRequest[]      @relation("RequesterShift")
-  swapAsTarget     SwapRequest[]      @relation("TargetShift")
+  swapAsRequester  SwapRequest[]     @relation("RequesterShift")
+  swapAsTarget     SwapRequest[]     @relation("TargetShift")
   snapshots        ShiftSnapshot[]
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @updatedAt
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 }
 
 model ShiftTemplate {
   id              String           @id @default(cuid())
-  storeId          String
-  dayPattern       String
-  dayOfWeek        Int?
+  storeId         String
+  dayPattern      String
+  dayOfWeek       Int?
   name            String
-  startTime        String
-  endTime          String
-  roleLabel        String?
+  startTime       String
+  endTime         String
+  roleLabel       String?
   active          Boolean          @default(true)
   store           Store            @relation(fields: [storeId], references: [id], onDelete: Cascade)
   unavailableDays UnavailableDay[]
@@ -303,37 +303,41 @@ model CoverageRequest {
 }
 
 model SwapRequest {
-  id                 String     @id @default(cuid())
-  requesterId        String
-  targetEmployeeId   String?
-  requesterShiftId   String
-  targetShiftId      String?
-  status             SwapStatus @default(pending_employee_response)
-  reason             String?
-  managerNote        String?
-  approvedById       String?
-  approvedAt         DateTime?
-  requester          User       @relation("SwapRequester", fields: [requesterId], references: [id])
-  targetEmployee     User?      @relation("SwapTarget", fields: [targetEmployeeId], references: [id])
-  requesterShift     Shift      @relation("RequesterShift", fields: [requesterShiftId], references: [id], onDelete: Cascade)
-  targetShift        Shift?     @relation("TargetShift", fields: [targetShiftId], references: [id], onDelete: Cascade)
-  approvedBy         User?      @relation("SwapApprover", fields: [approvedById], references: [id])
-  createdAt          DateTime   @default(now())
-  updatedAt          DateTime   @updatedAt
+  id               String     @id @default(cuid())
+  requesterId      String
+  targetEmployeeId String?
+  requesterShiftId String
+  targetShiftId    String?
+  status           SwapStatus @default(pending_employee_response)
+  reason           String?
+  managerNote      String?
+  approvedById     String?
+  approvedAt       DateTime?
+  requester        User       @relation("SwapRequester", fields: [requesterId], references: [id])
+  targetEmployee   User?      @relation("SwapTarget", fields: [targetEmployeeId], references: [id])
+  requesterShift   Shift      @relation("RequesterShift", fields: [requesterShiftId], references: [id], onDelete: Cascade)
+  targetShift      Shift?     @relation("TargetShift", fields: [targetShiftId], references: [id], onDelete: Cascade)
+  approvedBy       User?      @relation("SwapApprover", fields: [approvedById], references: [id])
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
 }
 
 model NotificationLog {
-  id           String    @id @default(cuid())
-  storeId      String
-  userId       String?
-  type         String
-  subject      String
-  status       String
-  sentAt       DateTime?
-  metadataJson Json?
-  store        Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  user         User?     @relation(fields: [userId], references: [id])
-  createdAt    DateTime  @default(now())
+  id            String    @id @default(cuid())
+  dedupKey      String?   @unique
+  storeId       String
+  userId        String?
+  type          String
+  subject       String
+  status        String
+  sentAt        DateTime?
+  providerId    String?
+  failureReason String?
+  metadataJson  Json?
+  store         Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  user          User?     @relation(fields: [userId], references: [id])
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 }
 
 model AuditLog {

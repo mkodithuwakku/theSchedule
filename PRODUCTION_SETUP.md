@@ -68,8 +68,20 @@ Changing a person's access is a database operation on `StoreMembership.role` and
    - `RESEND_API_KEY`
    - `EMAIL_FROM`
    - `OWNER_ALERT_EMAIL`
+   - `CRON_SECRET` (a long random value used by Vercel to authorize the daily rollout job)
 
    The sending domain must be verified in Resend before real delivery is reliable.
+
+   The existing Neon database was originally created with `prisma db push`, so baseline it once before applying the notification-delivery migration:
+
+   ```bash
+   npx prisma migrate resolve --applied 0_init
+   npm run prisma:deploy
+   ```
+
+   Run both commands with the production `DATABASE_URL`. `0_init` records the tables already present without recreating them; `prisma:deploy` then applies only the new notification-delivery fields.
+
+   Vercel runs `/api/cron/schedule-rollout` daily at 16:00 UTC. The route calculates the date in `America/Edmonton`, sends availability requests exactly three calendar days before release, and uses database deduplication records to skip retries that have already been processed.
 
 6. Seed the store and manager.
    `SEED_MANAGER_EMAIL` should stay as `m.kodithuwakku803@gmail.com` unless the manager account changes.
@@ -90,6 +102,8 @@ Changing a person's access is a database operation on `StoreMembership.role` and
 4. Confirm the employee can change only their own availability and requests.
 5. Sign in with the manager account and confirm manager tools plus `My employee view` are available.
 6. Refresh on a second device and confirm schedule changes persist through Neon.
+7. Temporarily set a draft period release date three days ahead, invoke the secured cron route, and confirm each active member receives one availability email and a second invocation reports duplicates skipped.
+8. Publish the schedule and confirm each active member receives one consolidated email containing all of their assigned shifts; verify provider IDs or failure reasons in `NotificationLog`.
 
 ## What To Ask Your Manager For
 

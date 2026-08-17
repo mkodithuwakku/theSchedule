@@ -26,6 +26,7 @@ import {
 import { signOut } from "next-auth/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AppAccess } from "@/lib/access-shared";
+import { dateInTimeZone } from "@/lib/schedule-rollout";
 import {
   type AuditEntry,
   type AvailabilitySubmission,
@@ -579,6 +580,7 @@ export function TheScheduleApp({
   const [showOnlyUnassigned, setShowOnlyUnassigned] = useState(false);
   const [showIssueReporter, setShowIssueReporter] = useState(false);
   const [showPublishReview, setShowPublishReview] = useState(false);
+  const [publishStatus, setPublishStatus] = useState<"idle" | "publishing" | "error">("idle");
   const [availabilityForm, setAvailabilityForm] = useState({
     date: period.startDate,
     unavailableType: "full_day" as UnavailableType,
@@ -686,8 +688,10 @@ export function TheScheduleApp({
     () => shiftTemplates.filter((template) => template.dayPattern === templatePatternForDate(availabilityForm.date) && template.active),
     [availabilityForm.date]
   );
-  const testTodayIso = dateToIso(new Date(TEST_TODAY));
-  const canChangeAvailability = parseLocalDate(testTodayIso) <= parseLocalDate(period.availabilityDeadlineAt);
+  const todayIso = isDevelopmentTestMode
+    ? dateToIso(new Date(TEST_TODAY))
+    : dateInTimeZone(new Date(), store.timezone);
+  const canChangeAvailability = parseLocalDate(todayIso) <= parseLocalDate(period.availabilityDeadlineAt);
   const canAutoAssignSchedule = schedulableEmployees.length > 0 && missingAvailability.length === 0;
   const publishWarnings = [
     shifts.length === 0 ? "Generate or add at least one shift before publishing." : "",
@@ -1364,17 +1368,6 @@ export function TheScheduleApp({
       availabilityDeadlineAt,
       availabilityOpenAt
     }));
-    schedulableEmployees.forEach((employee) =>
-      addNotification(
-        "availability_reminder",
-        "Availability due date updated",
-        employee.id,
-        buildNotificationHtml(
-          "Availability due date updated",
-          `Please submit availability by ${availabilityDeadlineAt}. The schedule is due ${releaseDate}.`
-        )
-      )
-    );
     addAudit(
       "schedule_due_date_updated",
       "SchedulePeriod",
@@ -1526,34 +1519,38 @@ export function TheScheduleApp({
       return;
     }
 
+    setPublishStatus("idle");
     setShowPublishReview(true);
   }
 
-  function confirmPublishSchedule() {
-    setPeriod((current) => ({ ...current, status: "published", publishedAt: new Date().toISOString() }));
-    setShifts((current) =>
-      current.map((shift) => ({
+  async function confirmPublishSchedule() {
+    setPublishStatus("publishing");
+    const publishShifts = shifts.map((shift) => ({
         ...shift,
         originalEmployeeId: shift.originalEmployeeId ?? shift.employeeId,
         originalStartTime: shift.originalStartTime ?? shift.startTime,
         originalEndTime: shift.originalEndTime ?? shift.endTime
-      }))
-    );
-    shifts
-      .filter((shift) => shift.employeeId)
-      .forEach((shift) =>
-        addNotification(
-          "schedule_published",
-          `New schedule published: ${period.name}`,
-          shift.employeeId,
-          buildNotificationHtml(
-            `New schedule published: ${period.name}`,
-            `Your schedule includes ${getDayName(shift.date)} ${formatTime(shift.startTime)}-${formatTime(shift.endTime)}.`
-          )
-        )
-      );
-    addAudit("schedule_published", "SchedulePeriod", period.id, `Published ${period.name}.`);
-    setShowPublishReview(false);
+      }));
+
+    try {
+      const response = await fetch("/api/schedule/publish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ period, shifts: publishShifts })
+      });
+      const result = (await response.json()) as { state?: StoredTestState; error?: string };
+      if (!response.ok || !result.state) throw new Error(result.error ?? "Unable to publish the schedule.");
+
+      setPeriod(result.state.period);
+      setShifts(result.state.shifts);
+      setNotifications(result.state.notifications);
+      setAuditLog(result.state.auditLog);
+      setPublishStatus("idle");
+      setShowPublishReview(false);
+    } catch (error) {
+      setPublishStatus("error");
+      window.alert(error instanceof Error ? error.message : "Unable to publish the schedule.");
+    }
   }
 
   function buildUnavailableEntry() {
@@ -2792,17 +2789,22 @@ export function TheScheduleApp({
                 icon={<Send size={18} />}
                 action={
                   <div className="flex flex-wrap gap-2">
-                    <Button variant="secondary" onClick={() => setShowPublishReview(false)}>
+                    <Button variant="secondary" onClick={() => setShowPublishReview(false)} disabled={publishStatus === "publishing"}>
                       <X size={16} />
                       Cancel
                     </Button>
-                    <Button onClick={confirmPublishSchedule}>
+                    <Button onClick={() => void confirmPublishSchedule()} disabled={publishStatus === "publishing"}>
                       <Check size={16} />
-                      Confirm publish
+                      {publishStatus === "publishing" ? "Publishing and emailing" : "Confirm publish"}
                     </Button>
                   </div>
                 }
               >
+                {publishStatus === "error" && (
+                  <div className="mb-4 rounded-lg border border-warn bg-warn/10 p-3 text-sm font-semibold">
+                    The schedule could not be published. Review the error and try again.
+                  </div>
+                )}
                 <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
                   <div className="grid gap-3">
                     <div className="rounded-lg border border-line bg-paper p-4">
