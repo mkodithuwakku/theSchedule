@@ -3479,7 +3479,7 @@ export function TheScheduleApp({
                     <details
                       key={phase.id}
                       className="rounded-lg border border-line bg-white shadow-panel"
-                      defaultOpen={phaseIndex === 0}
+                      open={phaseIndex === 0 ? true : undefined}
                     >
                       <summary className="cursor-pointer list-none px-4 py-4 marker:hidden">
                         <div className="flex flex-wrap items-start justify-between gap-3">
