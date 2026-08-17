@@ -102,7 +102,7 @@ Use the manager `Test Plan` tab as the source of truth. It contains 111 manually
 ### Daily schedule backup and recovery
 
 - The Vercel cron ensures every store has a workspace, then overwrites one snapshot per store every day; storage does not grow by one file or row per run.
-- If the cron has not refreshed the snapshot yet, the first successful schedule save on that Edmonton calendar day performs the same one-row overwrite as a fallback.
+- Every successful schedule save overwrites the same protected row, covering midweek edits immediately. The daily cron supplies the idle-day refresh. A same-day `pre_reset` snapshot is preserved until a manager explicitly backs up again or the next Edmonton day begins.
 - Open `Settings` → `Schedule Backup` to verify the latest time, source version, size, and integrity identifier.
 - Select `Back up now` after an important mid-day schedule change when you do not want to wait for the daily run.
 - To recover, type `RESTORE LATEST BACKUP` exactly and confirm. The server verifies the saved checksum before replacing the workspace.

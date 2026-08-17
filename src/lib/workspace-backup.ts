@@ -36,6 +36,16 @@ export function isWorkspaceBackupCurrentForDay(
   return dateInTimeZone(backedUpAt, timeZone) === dateInTimeZone(now, timeZone);
 }
 
+export function shouldPreserveBackupAfterSave(
+  backup: { reason: string; backedUpAt: Date } | null,
+  now: Date
+) {
+  return Boolean(
+    backup?.reason === "pre_reset" &&
+    isWorkspaceBackupCurrentForDay(backup.backedUpAt, now)
+  );
+}
+
 function jsonValue(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 }
@@ -128,9 +138,17 @@ export async function ensureDailyWorkspaceBackup(storeId: string, now = new Date
   return overwriteWorkspaceBackup(storeId, "daily");
 }
 
+export async function protectWorkspaceAfterSave(storeId: string, now = new Date()) {
+  const existing = await prisma.storeWorkspaceBackup.findUnique({ where: { storeId } });
+  if (shouldPreserveBackupAfterSave(existing, now)) {
+    return backupStatus(existing);
+  }
+  return overwriteWorkspaceBackup(storeId, "daily");
+}
+
 export async function overwriteAllWorkspaceBackups() {
   const stores = await prisma.store.findMany({ select: { id: true } });
-  return Promise.all(stores.map(({ id }) => overwriteWorkspaceBackup(id, "daily")));
+  return Promise.all(stores.map(({ id }) => ensureDailyWorkspaceBackup(id)));
 }
 
 export async function readWorkspaceBackupStatus(storeId: string) {

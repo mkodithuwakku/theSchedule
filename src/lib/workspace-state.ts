@@ -2,7 +2,7 @@ import type { AuditEntry, CoverageRequest, NotificationEntry, SwapRequest } from
 import { prisma } from "@/lib/prisma";
 import { createDefaultTestState, normalizeTestState } from "@/lib/test-state";
 import type { StoredTestState, UatIssue } from "@/lib/test-state-shared";
-import { ensureDailyWorkspaceBackup, overwriteWorkspaceBackup } from "@/lib/workspace-backup";
+import { overwriteWorkspaceBackup, protectWorkspaceAfterSave } from "@/lib/workspace-backup";
 
 function jsonValue<T>(value: T) {
   return JSON.parse(JSON.stringify(value));
@@ -42,7 +42,7 @@ export async function writeWorkspaceState(storeId: string, state: Partial<Stored
         data: jsonValue(normalized)
       }
     });
-    await ensureDailyWorkspaceBackup(storeId);
+    await protectWorkspaceAfterSave(storeId);
     return normalized;
   }
 
@@ -60,7 +60,7 @@ export async function writeWorkspaceState(storeId: string, state: Partial<Stored
     }
   });
   if (updated.count === 0) throw new StaleUatRunError();
-  await ensureDailyWorkspaceBackup(storeId);
+  await protectWorkspaceAfterSave(storeId);
   return normalized;
 }
 
