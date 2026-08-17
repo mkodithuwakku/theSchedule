@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { dateInTimeZone } from "@/lib/schedule-rollout";
 import { createDefaultTestState, normalizeTestState } from "@/lib/test-state";
 import type { StoredTestState } from "@/lib/test-state-shared";
 import type { WorkspaceBackupReason, WorkspaceBackupStatus } from "@/lib/workspace-backup-shared";
@@ -25,6 +26,14 @@ export function createWorkspaceBackupFingerprint(value: unknown) {
     checksum: createHash("sha256").update(canonicalJson).digest("hex"),
     byteSize: Buffer.byteLength(canonicalJson, "utf8")
   };
+}
+
+export function isWorkspaceBackupCurrentForDay(
+  backedUpAt: Date,
+  now: Date,
+  timeZone = "America/Edmonton"
+) {
+  return dateInTimeZone(backedUpAt, timeZone) === dateInTimeZone(now, timeZone);
 }
 
 function jsonValue(value: unknown): Prisma.InputJsonValue {
@@ -109,6 +118,14 @@ export async function overwriteWorkspaceBackupWithClient(
 
 export async function overwriteWorkspaceBackup(storeId: string, reason: WorkspaceBackupReason) {
   return overwriteWorkspaceBackupWithClient(prisma, storeId, reason);
+}
+
+export async function ensureDailyWorkspaceBackup(storeId: string, now = new Date()) {
+  const existing = await prisma.storeWorkspaceBackup.findUnique({ where: { storeId } });
+  if (existing && isWorkspaceBackupCurrentForDay(existing.backedUpAt, now)) {
+    return backupStatus(existing);
+  }
+  return overwriteWorkspaceBackup(storeId, "daily");
 }
 
 export async function overwriteAllWorkspaceBackups() {

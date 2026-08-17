@@ -95,6 +95,7 @@ Important UX expectations from the user:
 - Server-backed test persistence through `/api/test-state`, with browser localStorage fallback.
 - Production-visible 111-flow manager UAT plan with manual status tracking, filtering, and CSV/JSON export.
 - One bounded Neon schedule backup per store, overwritten daily or on demand, automatically refreshed before destructive resets, and restorable by an active manager.
+- The first successful workspace save on an Edmonton day refreshes a missing daily backup as a fallback to the Vercel cron.
 - Manager-only clean-run reset for first-login retesting, guarded by typed confirmation and stale-run write rejection.
 - UAT issue tracker and exports.
 - Notification preview center and notification log.

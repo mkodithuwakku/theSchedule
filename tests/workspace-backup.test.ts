@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   createWorkspaceBackupFingerprint,
+  isWorkspaceBackupCurrentForDay,
   WorkspaceBackupIntegrityError,
   WorkspaceBackupNotFoundError
 } from "../src/lib/workspace-backup";
@@ -30,6 +31,15 @@ test("backup fingerprints change when schedule content changes", () => {
   const changed = createWorkspaceBackupFingerprint({ shifts: [{ id: "shift_1", employeeId: "employee_2" }] });
 
   assert.notEqual(first.checksum, changed.checksum);
+});
+
+test("daily backup freshness follows the Edmonton calendar day", () => {
+  const lateEvening = new Date("2026-08-18T05:30:00.000Z");
+  const beforeLocalMidnight = new Date("2026-08-18T05:59:59.000Z");
+  const afterLocalMidnight = new Date("2026-08-18T06:00:00.000Z");
+
+  assert.equal(isWorkspaceBackupCurrentForDay(lateEvening, beforeLocalMidnight), true);
+  assert.equal(isWorkspaceBackupCurrentForDay(lateEvening, afterLocalMidnight), false);
 });
 
 test("restore requires the exact guarded confirmation phrase", () => {
