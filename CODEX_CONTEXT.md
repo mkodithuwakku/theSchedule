@@ -21,8 +21,9 @@ The current product goal is hosted, authenticated UAT with Google identities and
 - `src/lib/demo-data.ts` holds seeded business data, scheduling helpers, availability conflict logic, hours calculations, and notification/log types.
 - `src/lib/test-state-shared.ts` defines the persisted JSON test-state contract used by the client and API route.
 - `src/lib/test-state.ts` normalizes the JSON-backed test-state payload.
-- `src/lib/guided-uat.ts` defines the ordered, click-by-click normal schedule journey shown first in Test Plan.
-- `src/lib/uat-checklist.ts` defines the 111-flow advanced production UAT plan and validates persisted manual results; guided steps reuse matching advanced IDs.
+- `src/lib/guided-uat.ts` defines the ordered, click-by-click normal schedule journey shown first in Test Plan, including progression into the next schedule.
+- `src/lib/uat-checklist.ts` defines the 117-flow advanced production UAT plan and validates persisted manual results; guided steps reuse matching advanced IDs.
+- `src/lib/schedule-progression.ts` creates consecutive schedule periods, advances the shared manager-controlled UAT date, and keeps bounded six-period publication history.
 - `src/lib/uat-reset.ts` performs the manager-only clean-run reset, restores seeded identities, clears OAuth/session and UAT artifacts, and creates a new run identifier.
 - `src/lib/auth.ts` configures Google/Auth.js and permits verified Google identities to link to pre-seeded or invited user records on first login.
 - `src/lib/access.ts` resolves the signed-in Google account to an active Neon store membership.
@@ -94,7 +95,8 @@ Important UX expectations from the user:
 
 - Test-mode scenario buttons: Fresh pre-release, Availability submitted, Draft generated, Published.
 - Server-backed test persistence through `/api/test-state`, with browser localStorage fallback.
-- Production-visible guided full schedule run followed by a 111-flow advanced manager UAT plan, with shared manual status tracking, filtering, and CSV/JSON export.
+- Production-visible guided full schedule run followed by a 117-flow advanced manager UAT plan, with shared manual status tracking, filtering, and CSV/JSON export.
+- Manager-only day progression can archive a published period, open the next draft, advance or jump to the reminder date, run real deduplicated reminder delivery, and repeat after the next publication.
 - One bounded Neon schedule backup per store, overwritten daily or on demand, automatically refreshed before destructive resets, and restorable by an active manager.
 - Every successful workspace save refreshes the same backup row; the cron covers idle days, while same-day manual and `pre_reset` snapshots are preserved from automatic save overwrites.
 - Manager-only clean-run reset for first-login retesting, guarded by typed confirmation and stale-run write rejection.

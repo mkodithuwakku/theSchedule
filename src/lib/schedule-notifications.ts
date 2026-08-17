@@ -13,6 +13,7 @@ import {
 } from "@/lib/schedule-rollout";
 import { normalizeTestState } from "@/lib/test-state";
 import type { StoredTestState } from "@/lib/test-state-shared";
+import { readWorkspaceState, writeWorkspaceState } from "@/lib/workspace-state";
 
 function deliveryStatus(status: string): NotificationDispatchResult["status"] {
   if (status === "sent" || status === "failed") return status;
@@ -101,21 +102,72 @@ export async function sendDueAvailabilityReminders(now = new Date()) {
 
   const storeResults: Array<{ storeId: string; periodId: string; deliveries: NotificationDispatchResult[] }> = [];
   for (const store of stores) {
-    if (!store.workspaceState) continue;
-    const state = normalizeTestState(store.workspaceState.data as Partial<StoredTestState>);
-    const plans = buildAvailabilityReminderPlans({
-      storeId: store.id,
-      timeZone: store.timezone,
-      state,
-      members: membersForStore(store.memberships),
-      appUrl: getAppBaseUrl(),
-      now
-    });
-    if (plans.length === 0) continue;
-    storeResults.push({ storeId: store.id, periodId: state.period.id, deliveries: await dispatchNotificationPlans(plans, dispatcher) });
+    const result = await sendDueAvailabilityRemindersForStoreRecord(store, now);
+    if (result) storeResults.push(result);
   }
 
   return storeResults;
+}
+
+type ReminderStoreRecord = {
+  id: string;
+  timezone: string;
+  workspaceState: { data: unknown } | null;
+  memberships: Array<{
+    active: boolean;
+    user: { id: string; name: string | null; email: string | null; active: boolean };
+  }>;
+};
+
+async function sendDueAvailabilityRemindersForStoreRecord(store: ReminderStoreRecord, now: Date) {
+  if (!store.workspaceState) return null;
+  const state = normalizeTestState(store.workspaceState.data as Partial<StoredTestState>);
+  const plans = buildAvailabilityReminderPlans({
+    storeId: store.id,
+    timeZone: store.timezone,
+    state,
+    members: membersForStore(store.memberships),
+    appUrl: getAppBaseUrl(),
+    now
+  });
+  if (plans.length === 0) return null;
+
+  const deliveries = await dispatchNotificationPlans(plans, dispatcher);
+  const createdAt = now.toISOString();
+  const deliveryNotifications = deliveries.map((delivery) => ({
+    id: delivery.plan.dedupKey,
+    userId: delivery.plan.workspacePersonId,
+    type: delivery.plan.type,
+    subject: delivery.plan.subject,
+    status: delivery.status,
+    createdAt
+  }));
+  const deliveryIds = new Set(deliveryNotifications.map((notification) => notification.id));
+  const latestState = await readWorkspaceState(store.id);
+  await writeWorkspaceState(store.id, {
+    ...latestState,
+    notifications: [
+      ...deliveryNotifications,
+      ...latestState.notifications.filter((notification) => !deliveryIds.has(notification.id))
+    ]
+  });
+
+  return { storeId: store.id, periodId: state.period.id, deliveries };
+}
+
+export async function sendDueAvailabilityRemindersForStore(storeId: string, now = new Date()) {
+  const store = await prisma.store.findUnique({
+    where: { id: storeId },
+    include: {
+      workspaceState: true,
+      memberships: {
+        where: { active: true, user: { active: true } },
+        include: { user: true }
+      }
+    }
+  });
+  if (!store) throw new Error("Store is not configured.");
+  return sendDueAvailabilityRemindersForStoreRecord(store, now);
 }
 
 export async function sendPublishedScheduleNotifications(storeId: string, state: StoredTestState) {

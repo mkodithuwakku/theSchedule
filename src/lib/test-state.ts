@@ -60,7 +60,13 @@ export function createDefaultTestState(uatRunId = DEFAULT_UAT_RUN_ID): StoredTes
     preferences: {},
     uatIssues: [],
     inviteAcceptances: [],
-    uatChecklist: {}
+    uatChecklist: {},
+    dayProgression: {
+      enabled: false,
+      currentDate: schedulePeriod.availabilityOpenAt,
+      cycleNumber: 1
+    },
+    scheduleHistory: []
   };
 }
 
@@ -93,6 +99,11 @@ export function createCleanRunTestState(uatRunId: string, now = new Date()): Sto
     ...state,
     period,
     shifts: generateDefaultShifts(period),
+    dayProgression: {
+      enabled: false,
+      currentDate: period.availabilityOpenAt,
+      cycleNumber: 1
+    },
     auditLog: [
       {
         id: `audit_clean_${uatRunId}`,
@@ -109,6 +120,12 @@ export function createCleanRunTestState(uatRunId: string, now = new Date()): Sto
 
 export function normalizeTestState(candidate: Partial<StoredTestState>): StoredTestState {
   const defaults = createDefaultTestState();
+  const candidatePeriod = candidate.period ?? defaults.period;
+  const dayProgression = candidate.dayProgression;
+  const currentDate =
+    typeof dayProgression?.currentDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(dayProgression.currentDate)
+      ? dayProgression.currentDate
+      : candidatePeriod.availabilityOpenAt;
 
   return {
     uatRunId: typeof candidate.uatRunId === "string" && candidate.uatRunId.trim() ? candidate.uatRunId : defaults.uatRunId,
@@ -124,7 +141,16 @@ export function normalizeTestState(candidate: Partial<StoredTestState>): StoredT
     preferences: candidate.preferences ?? defaults.preferences,
     uatIssues: Array.isArray(candidate.uatIssues) ? candidate.uatIssues : defaults.uatIssues,
     inviteAcceptances: Array.isArray(candidate.inviteAcceptances) ? candidate.inviteAcceptances : defaults.inviteAcceptances,
-    uatChecklist: normalizeUatChecklistProgress(candidate.uatChecklist)
+    uatChecklist: normalizeUatChecklistProgress(candidate.uatChecklist),
+    dayProgression: {
+      enabled: dayProgression?.enabled === true,
+      currentDate,
+      cycleNumber:
+        typeof dayProgression?.cycleNumber === "number" && Number.isInteger(dayProgression.cycleNumber) && dayProgression.cycleNumber > 0
+          ? dayProgression.cycleNumber
+          : 1
+    },
+    scheduleHistory: Array.isArray(candidate.scheduleHistory) ? candidate.scheduleHistory : defaults.scheduleHistory
   };
 }
 

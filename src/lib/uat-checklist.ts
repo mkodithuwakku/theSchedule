@@ -994,6 +994,61 @@ export const UAT_CHECKLIST_GROUPS: UatChecklistGroup[] = [
         cleanRunRecommended: true
       }
     ]
+  },
+  {
+    id: "day-progression",
+    title: "14. Day progression and recurring schedule cycles",
+    description: "Advance a shared simulated date through reminder and publication milestones, then repeat the schedule cycle.",
+    items: [
+      {
+        id: "progression-start-cycle",
+        title: "Published schedule rolls into the next cycle",
+        actor: "Manager",
+        steps: ["Publish the current schedule.", "Open Test Plan and select Start next schedule cycle.", "Review the active period and Published schedule history."],
+        expected: "The published schedule is backed up and archived, while a new draft period opens with empty availability and fresh shift blocks.",
+        critical: true
+      },
+      {
+        id: "progression-advance-days",
+        title: "Shared test date advances through milestones",
+        actor: "Manager + employee",
+        steps: ["Select Advance 1 day several times.", "Refresh an employee browser after each change.", "Compare the displayed date and availability state."],
+        expected: "Every session observes the same forward-only simulated date and deadline-dependent controls change on the correct day.",
+        critical: true
+      },
+      {
+        id: "progression-reminder-email",
+        title: "Next-cycle reminder emails are delivered",
+        actor: "Manager + employee",
+        steps: ["Select Jump to reminder email day.", "Open Notifications.", "Check all four active-member inboxes."],
+        expected: "The existing daily-rollout path sends one deduplicated availability reminder per active member and records every result in the email log.",
+        critical: true
+      },
+      {
+        id: "progression-next-publish",
+        title: "Next schedule publishes and emails normally",
+        actor: "Manager + employee",
+        steps: ["Collect availability for the new period.", "Auto-complete and review the new schedule.", "Publish it and check employee inboxes and Notifications."],
+        expected: "The next period publishes with one consolidated schedule email per active member, independently of the prior period's deduplication keys.",
+        critical: true
+      },
+      {
+        id: "progression-repeat-cycle",
+        title: "A third schedule cycle can begin",
+        actor: "Manager",
+        steps: ["After publishing the second period, select Start following cycle.", "Review the new dates and schedule history.", "Advance to its reminder date."],
+        expected: "The process repeats with a unique period, new emails, and both prior published schedules retained in history.",
+        critical: true
+      },
+      {
+        id: "progression-history-bounded",
+        title: "Schedule history remains bounded and protected",
+        actor: "Manager",
+        steps: ["Repeat enough cycles to exceed six archived schedules or inspect the configured limit.", "Open Settings and review Schedule Backup."],
+        expected: "Only the six most recent published schedules remain in workspace history and the single verified backup slot is refreshed rather than accumulated.",
+        cleanRunRecommended: true
+      }
+    ]
   }
 ];
 

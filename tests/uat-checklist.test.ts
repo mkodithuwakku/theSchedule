@@ -36,7 +36,7 @@ test("guided UAT is an ordered full schedule journey backed by advanced results"
   const advancedIds = new Set(UAT_CHECKLIST_ITEMS.map((item) => item.id));
   const guidedIds = GUIDED_UAT_STEPS.map((step) => step.id);
 
-  assert.equal(GUIDED_UAT_PHASES.length, 9);
+  assert.equal(GUIDED_UAT_PHASES.length, 10);
   assert(GUIDED_UAT_STEPS.length >= 35);
   assert.equal(new Set(guidedIds).size, guidedIds.length);
   assert(GUIDED_UAT_STEPS.every((step) => advancedIds.has(step.id)));
@@ -50,7 +50,8 @@ test("guided UAT is an ordered full schedule journey backed by advanced results"
     "guided-employee-review",
     "guided-coverage",
     "guided-swaps",
-    "guided-finish"
+    "guided-finish",
+    "guided-day-progression"
   ]);
   assert(GUIDED_UAT_ACCOUNTS.some((account) => account.role === "Manager"));
   assert.equal(GUIDED_UAT_ACCOUNTS.filter((account) => account.role.startsWith("Employee")).length, 3);

@@ -55,6 +55,19 @@ export type InviteAcceptance = {
   name: string;
 };
 
+export type DayProgressionState = {
+  enabled: boolean;
+  currentDate: string;
+  cycleNumber: number;
+};
+
+export type ArchivedSchedule = {
+  id: string;
+  archivedAt: string;
+  period: SchedulePeriod;
+  shifts: Shift[];
+};
+
 export type StoredTestState = {
   uatRunId: string;
   people: Employee[];
@@ -70,4 +83,6 @@ export type StoredTestState = {
   uatIssues: UatIssue[];
   inviteAcceptances: InviteAcceptance[];
   uatChecklist: Record<string, UatCheckStatus>;
+  dayProgression: DayProgressionState;
+  scheduleHistory: ArchivedSchedule[];
 };

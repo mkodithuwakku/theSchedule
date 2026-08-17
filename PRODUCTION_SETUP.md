@@ -99,7 +99,19 @@ Changing a person's access is a database operation on `StoreMembership.role` and
 
 Use the manager `Test Plan` tab as the source of truth. Start with `Guided Full Schedule Run`, which gives the exact account, clicks, and pass condition for the ordinary end-to-end schedule cycle: sign-in, setup, availability, generation, editing, publication, employee review, coverage, swaps, reports, issue tracking, and backup. Use four separate browser profiles for the seeded manager and three seeded employees. Guided results persist through Neon and also mark their matching advanced tests.
 
-After the guided run, use the 111-test advanced checklist for signed-out/unauthorized paths, invite token edge cases, input validation, publish retries, approval/rejection alternatives, exports, concurrency, daily/manual backup and restore, provider failures, and reset verification. Results can be exported to CSV or JSON.
+After the guided run, use the 117-test advanced checklist for signed-out/unauthorized paths, invite token edge cases, input validation, publish retries, approval/rejection alternatives, exports, concurrency, daily/manual backup and restore, recurring schedule cycles, provider failures, and reset verification. Results can be exported to CSV or JSON.
+
+### Day progression and recurring schedule email test
+
+1. Publish the first schedule through the normal Builder confirmation.
+2. Open `Test Plan` → `Day Progression & Next Schedule Test`.
+3. Select `Start next schedule cycle`. The app creates a manual protected backup, moves the publication into six-cycle bounded history, and opens the next draft period.
+4. Select `Advance 1 day` to inspect ordinary daily changes, or `Jump to reminder email day` to reach the exact release-minus-three-day milestone.
+5. Open `Notifications` and the four test inboxes. Confirm one availability reminder per active member; retrying the same period does not create duplicates.
+6. Submit availability for the new period, build it, and publish normally. Confirm a new consolidated schedule email reaches every active member.
+7. Return to the progression panel and select `Start following cycle` to verify the process and unique email keys repeat for a third schedule.
+
+The simulated date is shared through Neon and affects availability deadlines for every signed-in test account. Only an active manager can advance it. `Use real date again` disables the simulated clock without deleting the active period or its history.
 
 ### Daily schedule backup and recovery
 

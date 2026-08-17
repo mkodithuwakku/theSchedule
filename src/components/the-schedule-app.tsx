@@ -26,7 +26,7 @@ import {
 import { signOut } from "next-auth/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AppAccess } from "@/lib/access-shared";
-import { dateInTimeZone } from "@/lib/schedule-rollout";
+import { availabilityReminderDate, dateInTimeZone } from "@/lib/schedule-rollout";
 import {
   type AuditEntry,
   type AvailabilitySubmission,
@@ -65,6 +65,8 @@ import {
   STORAGE_KEY,
   TEST_TODAY,
   type InviteAcceptance,
+  type ArchivedSchedule,
+  type DayProgressionState,
   type StoredTestState,
   type ThemePreference,
   type UatIssue,
@@ -110,6 +112,7 @@ type EmployeeForm = {
 
 type PersistenceStatus = "loading" | "saving" | "saved" | "local" | "error";
 type ScenarioPreset = "fresh" | "availability" | "draft" | "published";
+type DayProgressionAction = "start_next_cycle" | "advance_day" | "jump_to_reminder" | "stop_simulation";
 
 const issueCategories: Array<{ id: UatIssueCategory; label: string }> = [
   { id: "ui", label: "UI" },
@@ -592,6 +595,14 @@ export function TheScheduleApp({
   const [uatIssues, setUatIssues] = useState<UatIssue[]>([]);
   const [inviteAcceptances, setInviteAcceptances] = useState<InviteAcceptance[]>([]);
   const [uatChecklist, setUatChecklist] = useState<Record<string, UatCheckStatus>>({});
+  const [dayProgression, setDayProgression] = useState<DayProgressionState>({
+    enabled: false,
+    currentDate: schedulePeriod.availabilityOpenAt,
+    cycleNumber: 1
+  });
+  const [scheduleHistory, setScheduleHistory] = useState<ArchivedSchedule[]>([]);
+  const [dayProgressionAction, setDayProgressionAction] = useState<DayProgressionAction | null>(null);
+  const [dayProgressionMessage, setDayProgressionMessage] = useState("");
   const [hasLoadedStoredState, setHasLoadedStoredState] = useState(false);
   const [persistenceStatus, setPersistenceStatus] = useState<PersistenceStatus>("loading");
   const [testEmailStatus, setTestEmailStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
@@ -713,10 +724,21 @@ export function TheScheduleApp({
     () => shiftTemplates.filter((template) => template.dayPattern === templatePatternForDate(availabilityForm.date) && template.active),
     [availabilityForm.date]
   );
-  const todayIso = isDevelopmentTestMode
-    ? dateToIso(new Date(TEST_TODAY))
-    : dateInTimeZone(new Date(), store.timezone);
-  const canChangeAvailability = parseLocalDate(todayIso) <= parseLocalDate(period.availabilityDeadlineAt);
+  const todayIso = dayProgression.enabled
+    ? dayProgression.currentDate
+    : isDevelopmentTestMode
+      ? dateToIso(new Date(TEST_TODAY))
+      : dateInTimeZone(new Date(), store.timezone);
+  const reminderEmailDate = availabilityReminderDate(period.releaseDate);
+  const currentPeriodReminderEmails = notifications.filter(
+    (notification) => notification.type === "availability_reminder" && notification.id.includes(`:${period.id}:`)
+  );
+  const currentPeriodPublishedEmails = notifications.filter(
+    (notification) => notification.type === "schedule_published" && notification.id.includes(`:${period.id}:`)
+  );
+  const availabilityHasOpened = parseLocalDate(todayIso) >= parseLocalDate(period.availabilityOpenAt);
+  const availabilityDeadlinePassed = parseLocalDate(todayIso) > parseLocalDate(period.availabilityDeadlineAt);
+  const canChangeAvailability = availabilityHasOpened && !availabilityDeadlinePassed;
   const canAutoAssignSchedule = schedulableEmployees.length > 0 && missingAvailability.length === 0;
   const publishWarnings = [
     shifts.length === 0 ? "Generate or add at least one shift before publishing." : "",
@@ -873,6 +895,8 @@ export function TheScheduleApp({
       if (stored.uatIssues) setUatIssues(stored.uatIssues);
       if (stored.inviteAcceptances) setInviteAcceptances(stored.inviteAcceptances);
       if (stored.uatChecklist) setUatChecklist(stored.uatChecklist);
+      if (stored.dayProgression) setDayProgression(stored.dayProgression);
+      if (stored.scheduleHistory) setScheduleHistory(stored.scheduleHistory);
     }
 
     async function loadSavedState() {
@@ -927,7 +951,9 @@ export function TheScheduleApp({
       preferences,
       uatIssues,
       inviteAcceptances,
-      uatChecklist
+      uatChecklist,
+      dayProgression,
+      scheduleHistory
     };
 
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
@@ -950,7 +976,7 @@ export function TheScheduleApp({
       });
 
     return () => controller.abort();
-  }, [auditLog, availability, availabilityDrafts, coverage, hasLoadedStoredState, inviteAcceptances, notifications, people, period, preferences, shifts, swaps, uatChecklist, uatIssues, uatRunId]);
+  }, [auditLog, availability, availabilityDrafts, coverage, dayProgression, hasLoadedStoredState, inviteAcceptances, notifications, people, period, preferences, scheduleHistory, shifts, swaps, uatChecklist, uatIssues, uatRunId]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = currentTheme;
@@ -2273,6 +2299,10 @@ export function TheScheduleApp({
     setUatIssues([]);
     setInviteAcceptances([]);
     setUatChecklist({});
+    setDayProgression({ enabled: false, currentDate: schedulePeriod.availabilityOpenAt, cycleNumber: 1 });
+    setScheduleHistory([]);
+    setDayProgressionAction(null);
+    setDayProgressionMessage("");
     setSelectedShiftId(null);
     setShowOnlyUnassigned(false);
     setShowIssueReporter(false);
@@ -2334,7 +2364,9 @@ export function TheScheduleApp({
         preferences,
         uatIssues,
         inviteAcceptances,
-        uatChecklist
+        uatChecklist,
+        dayProgression,
+        scheduleHistory
       };
       const saveResponse = await fetch("/api/test-state", {
         method: "PUT",
@@ -2381,6 +2413,61 @@ export function TheScheduleApp({
       setBackupAction("error");
       setHasLoadedStoredState(true);
       window.alert(error instanceof Error ? error.message : "Unable to restore the schedule backup.");
+    }
+  }
+
+  function applyDayProgressionState(state: StoredTestState) {
+    setUatRunId(state.uatRunId);
+    setPeople(state.people);
+    setPeriod(state.period);
+    setShifts(state.shifts);
+    setAvailability(state.availability);
+    setCoverage(state.coverage);
+    setSwaps(state.swaps);
+    setAuditLog(state.auditLog);
+    setNotifications(state.notifications);
+    setAvailabilityDrafts(state.availabilityDrafts);
+    setPreferences(state.preferences);
+    setUatIssues(state.uatIssues);
+    setInviteAcceptances(state.inviteAcceptances);
+    setUatChecklist(state.uatChecklist);
+    setDayProgression(state.dayProgression);
+    setScheduleHistory(state.scheduleHistory);
+    setSelectedShiftId(state.shifts[0]?.id ?? null);
+    setAvailabilityForm((current) => ({ ...current, date: state.period.startDate }));
+    setShowPublishReview(false);
+    setShowOnlyUnassigned(false);
+  }
+
+  async function runDayProgressionAction(action: DayProgressionAction) {
+    if (!isManager || dayProgressionAction) return;
+    if (
+      action === "start_next_cycle" &&
+      !window.confirm(
+        "Archive the published schedule, protect it in the backup, and open the next schedule period? The published period will remain in Schedule history."
+      )
+    ) {
+      return;
+    }
+
+    setDayProgressionAction(action);
+    setDayProgressionMessage("");
+    try {
+      const response = await fetch("/api/uat/day-progression", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action })
+      });
+      const result = (await response.json()) as { state?: StoredTestState; message?: string; error?: string };
+      if (!response.ok || !result.state) throw new Error(result.error ?? "Unable to advance the schedule test.");
+      applyDayProgressionState(result.state);
+      setDayProgressionMessage(result.message ?? "The schedule test was updated.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to advance the schedule test.";
+      setDayProgressionMessage(message);
+      window.alert(message);
+    } finally {
+      setDayProgressionAction(null);
     }
   }
 
@@ -2437,6 +2524,10 @@ export function TheScheduleApp({
     setUatIssues([]);
     setInviteAcceptances(presetInviteAcceptances);
     setUatChecklist({});
+    setDayProgression({ enabled: false, currentDate: nextPeriod.availabilityOpenAt, cycleNumber: 1 });
+    setScheduleHistory([]);
+    setDayProgressionAction(null);
+    setDayProgressionMessage("");
     setSelectedShiftId(nextShifts[0]?.id ?? null);
     setShowOnlyUnassigned(false);
     setShowIssueReporter(false);
@@ -3125,7 +3216,13 @@ export function TheScheduleApp({
                     {!activeInviteAccepted ? "Invite not accepted." : activeEmployeeNeedsAvailability ? "Add unavailable days." : "Submitted."}
                   </div>
                   <div className="mt-1 text-ink/60">
-                    {!activeInviteAccepted ? "Accept the invite before submitting." : canChangeAvailability ? "Add days first, then submit." : "Deadline passed."}
+                    {!activeInviteAccepted
+                      ? "Accept the invite before submitting."
+                      : !availabilityHasOpened
+                        ? `Availability opens ${period.availabilityOpenAt}.`
+                        : canChangeAvailability
+                          ? "Add days first, then submit."
+                          : "Deadline passed."}
                   </div>
                   {activeSubmission?.submittedAt && (
                     <Button className="mt-3" variant="secondary" onClick={beginEditAvailability} disabled={!canChangeAvailability}>
@@ -3570,6 +3667,173 @@ export function TheScheduleApp({
                     </details>
                   );
                 })}
+              </div>
+            </Section>
+
+            <Section
+              title="Day Progression & Next Schedule Test"
+              icon={<CalendarDays size={18} />}
+              action={
+                <Badge tone={dayProgression.enabled ? "good" : "neutral"}>
+                  {dayProgression.enabled ? `Cycle ${dayProgression.cycleNumber} · ${dayProgression.currentDate}` : "Not started"}
+                </Badge>
+              }
+            >
+              <div className="grid gap-4">
+                <div className="rounded-lg border border-line bg-paper p-4">
+                  <h3 className="font-black">Test more than one schedule without waiting weeks.</h3>
+                  <p className="mt-2 text-sm leading-6 text-ink/70">
+                    Publish the first schedule normally, then start the next cycle here. The app protects and archives the
+                    published schedule, opens the next period, and lets every signed-in test account share a simulated Edmonton
+                    date. Advancing onto the reminder date runs the same deduplicated email delivery used by the daily Vercel job.
+                  </p>
+                </div>
+
+                {!dayProgression.enabled ? (
+                  <div className="grid gap-3 rounded-lg border border-line p-4 lg:grid-cols-[1fr_auto] lg:items-center">
+                    <div>
+                      <div className="font-black">
+                        {period.status === "published" ? "The first schedule is ready to archive." : "Publish the first schedule before continuing."}
+                      </div>
+                      <p className="mt-1 text-sm leading-6 text-ink/65">
+                        Starting the next cycle keeps up to six prior published schedules in bounded history and refreshes the
+                        protected backup before the active calendar changes.
+                      </p>
+                    </div>
+                    <Button
+                      onClick={() => void runDayProgressionAction("start_next_cycle")}
+                      disabled={period.status !== "published" || dayProgressionAction !== null}
+                    >
+                      <Repeat2 size={16} />
+                      Start next schedule cycle
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                      <Metric label="Simulated date" value={shortDayLabel(dayProgression.currentDate)} detail={dayProgression.currentDate} tone="good" />
+                      <Metric label="Active cycle" value={String(dayProgression.cycleNumber)} detail={period.name} />
+                      <Metric label="Reminder emails" value={String(currentPeriodReminderEmails.length)} detail={`Due ${reminderEmailDate}`} tone={currentPeriodReminderEmails.length ? "good" : "warn"} />
+                      <Metric label="Schedule emails" value={String(currentPeriodPublishedEmails.length)} detail={period.status === "published" ? "Published" : "Waiting for publish"} tone={currentPeriodPublishedEmails.length ? "good" : "warn"} />
+                    </div>
+
+                    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+                      {[
+                        { label: "Availability opens", date: period.availabilityOpenAt },
+                        { label: "Reminder email", date: reminderEmailDate },
+                        { label: "Availability due", date: period.availabilityDeadlineAt },
+                        { label: "Publish due", date: period.releaseDate },
+                        { label: "Schedule starts", date: period.startDate }
+                      ].map((milestone) => (
+                        <div
+                          key={milestone.label}
+                          className={cx(
+                            "rounded-lg border p-3",
+                            dayProgression.currentDate >= milestone.date ? "border-approve/30 bg-approve/10" : "border-line bg-white"
+                          )}
+                        >
+                          <div className="text-xs font-semibold uppercase tracking-normal text-ink/50">{milestone.label}</div>
+                          <div className="mt-1 font-black">{shortDayLabel(milestone.date)}</div>
+                          <div className="text-xs text-ink/55">{milestone.date}</div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        onClick={() => void runDayProgressionAction("advance_day")}
+                        disabled={dayProgressionAction !== null}
+                      >
+                        <CalendarDays size={16} />
+                        {dayProgressionAction === "advance_day" ? "Advancing" : "Advance 1 day"}
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        onClick={() => void runDayProgressionAction("jump_to_reminder")}
+                        disabled={dayProgressionAction !== null || dayProgression.currentDate >= reminderEmailDate || period.status === "published"}
+                      >
+                        <Mail size={16} />
+                        {dayProgressionAction === "jump_to_reminder" ? "Sending reminders" : "Jump to reminder email day"}
+                      </Button>
+                      <Button variant="secondary" onClick={() => setActiveTab("availability")}>
+                        <Clock size={16} />
+                        Availability tracker
+                      </Button>
+                      <Button variant="secondary" onClick={() => setActiveTab("builder")}>
+                        <Plus size={16} />
+                        Build next schedule
+                      </Button>
+                      <Button variant="secondary" onClick={() => setActiveTab("notifications")}>
+                        <Mail size={16} />
+                        Check email log
+                      </Button>
+                      {period.status === "published" && (
+                        <Button
+                          onClick={() => void runDayProgressionAction("start_next_cycle")}
+                          disabled={dayProgressionAction !== null}
+                        >
+                          <Repeat2 size={16} />
+                          Start following cycle
+                        </Button>
+                      )}
+                      <Button
+                        variant="ghost"
+                        onClick={() => void runDayProgressionAction("stop_simulation")}
+                        disabled={dayProgressionAction !== null}
+                      >
+                        Use real date again
+                      </Button>
+                    </div>
+
+                    {dayProgressionMessage && (
+                      <div className="rounded-lg border border-approve/30 bg-approve/10 p-3 text-sm font-semibold text-approve">
+                        {dayProgressionMessage}
+                      </div>
+                    )}
+                  </>
+                )}
+
+                <div className="rounded-lg border border-line p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <h3 className="font-black">Published schedule history</h3>
+                      <p className="mt-1 text-sm text-ink/60">Bounded to the six most recent cycles.</p>
+                    </div>
+                    <Badge>{scheduleHistory.length}/6 saved</Badge>
+                  </div>
+                  <div className="mt-3 grid gap-2">
+                    {scheduleHistory.length === 0 && (
+                      <div className="rounded-md border border-dashed border-line p-4 text-sm font-semibold text-ink/50">
+                        The first published schedule appears here when you start the next cycle.
+                      </div>
+                    )}
+                    {scheduleHistory.map((archive) => (
+                      <details key={archive.id} className="rounded-md bg-paper text-sm">
+                        <summary className="cursor-pointer list-none p-3 marker:hidden">
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                              <div className="font-black">{archive.period.name}</div>
+                              <div className="mt-0.5 text-ink/60">Published {archive.period.publishedAt ? new Date(archive.period.publishedAt).toLocaleString() : "time unavailable"}</div>
+                            </div>
+                            <Badge tone="good">{archive.shifts.length} shifts protected · View</Badge>
+                          </div>
+                        </summary>
+                        <div className="grid gap-2 border-t border-line p-3 sm:grid-cols-2 xl:grid-cols-3">
+                          {[...archive.shifts]
+                            .sort((left, right) => `${left.date}${left.startTime}`.localeCompare(`${right.date}${right.startTime}`))
+                            .map((shift) => (
+                              <div key={shift.id} className="rounded-md border border-line bg-white p-2">
+                                <div className="font-black">{getDayName(shift.date)}</div>
+                                <div className="mt-0.5 text-ink/60">
+                                  {formatTime(shift.startTime)}-{formatTime(shift.endTime)} · {shift.employeeId ? nameFor(shift.employeeId) : shift.externalAssigneeName ?? "Unassigned"}
+                                </div>
+                              </div>
+                            ))}
+                        </div>
+                      </details>
+                    ))}
+                  </div>
+                </div>
               </div>
             </Section>
 

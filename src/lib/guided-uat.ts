@@ -627,6 +627,73 @@ export const GUIDED_UAT_PHASES: GuidedUatPhase[] = [
         expected: "Sign-out removes access, while the next authorized sign-in restores the saved production workspace."
       }
     ]
+  },
+  {
+    id: "guided-day-progression",
+    title: "10. Progress into the next schedule",
+    description: "After the first publication, move the shared test date through a second reminder, schedule build, and publication.",
+    steps: [
+      {
+        id: "progression-start-cycle",
+        title: "Open the next schedule cycle",
+        actor: "Manager",
+        instructions: [
+          "Return to Test Plan and find Day Progression & Next Schedule Test.",
+          "Confirm the current schedule is Published, then select Start next schedule cycle and confirm.",
+          "Check that the old period appears under Published schedule history and a new Draft period becomes active."
+        ],
+        expected: "The first schedule remains protected in backup/history while the next period opens with fresh shifts and availability.",
+        target: { mode: "manager", tab: "uat-plan", label: "Open Day Progression Test" }
+      },
+      {
+        id: "progression-advance-days",
+        title: "Advance through ordinary days",
+        actor: "Manager + employee",
+        instructions: [
+          "Select Advance 1 day twice and note the simulated date after each click.",
+          "Refresh one employee browser and confirm it sees the same active period and availability state.",
+          "Return to Test Plan and compare the date with the milestone cards."
+        ],
+        expected: "The simulated Edmonton date moves forward one day at a time and is shared by every signed-in test account.",
+        target: { mode: "manager", tab: "uat-plan", label: "Open Day Progression Test" }
+      },
+      {
+        id: "progression-reminder-email",
+        title: "Trigger the next availability reminder emails",
+        actor: "Manager + employees",
+        instructions: [
+          "Select Jump to reminder email day.",
+          "Select Check email log and find one availability reminder for each active member.",
+          "Check the four test inboxes and confirm each received the reminder once."
+        ],
+        expected: "The same daily rollout used in production sends and logs one deduplicated next-cycle reminder per active member.",
+        target: { mode: "manager", tab: "uat-plan", label: "Open Day Progression Test" }
+      },
+      {
+        id: "progression-next-publish",
+        title: "Build and publish the second schedule",
+        actor: "Manager + employees",
+        instructions: [
+          "Have all four staff submit availability for the new period, then verify the manager tracker.",
+          "Open Builder, select Auto complete, review assignments, and publish the new schedule.",
+          "Check Notifications and every inbox for the new period's consolidated schedule email."
+        ],
+        expected: "The second schedule publishes normally and creates a fresh consolidated email for each active member.",
+        target: { mode: "manager", tab: "builder", label: "Build Next Schedule" }
+      },
+      {
+        id: "progression-repeat-cycle",
+        title: "Prove another cycle can repeat",
+        actor: "Manager",
+        instructions: [
+          "Return to Day Progression & Next Schedule Test after the second schedule is Published.",
+          "Select Start following cycle and confirm a third period opens.",
+          "Verify both earlier published periods remain in history and the new reminder milestone has new dates."
+        ],
+        expected: "A third unique cycle opens without losing either prior schedule or suppressing the next cycle's emails.",
+        target: { mode: "manager", tab: "uat-plan", label: "Open Day Progression Test" }
+      }
+    ]
   }
 ];
 
