@@ -18,7 +18,7 @@ The app is based on the uploaded Store Scheduler SRS and includes:
 - Documented future path for multi-store expansion with store-specific branding, employees, schedules, and themes
 - Manager dashboard, employee management, availability tracker, schedule builder, coverage/swap approvals, hours report, CSV export, print view, and settings
 - Employee dashboard, availability submission, my shifts, full team schedule, coverage offers, and swap requests
-- Production UAT test plan with 111 manually tracked flows, search/filtering, and CSV/JSON result export
+- Guided click-by-click full schedule run plus 111 advanced production flows, with saved results, search/filtering, and CSV/JSON export
 - Manager-only clean-run reset that restores seeded identities while clearing UAT data, OAuth links, sessions, and notification deduplication
 - Development-only scenario presets for quickly loading common workflow states
 - UAT issue tracker with status toggles and CSV/JSON export
@@ -77,7 +77,9 @@ The workspace persists through Neon. Browser storage remains only a temporary re
 Schedule views render as Sunday-start calendar weeks.
 In the manager builder, click a shift to open the assignment panel, use `Unassigned` to filter unassigned shifts, and `Publish` warns before publishing with unassigned shifts.
 Coverage requests and shift swaps are included in the saved test state, so they survive refreshes and can be tested across manager/employee role switches.
-The manager `Test Plan` tab contains 111 production flows across release configuration, authentication, invitations, availability, schedule building, publishing, coverage, swaps, reports, persistence, backups, authorization failures, and reset behavior. Mark each flow Not run, Passed, Failed, or Blocked; progress is saved in Neon and can be exported as CSV or JSON.
+The manager `Test Plan` tab starts with a guided full schedule run. It walks the manager through the normal business journey in order: four-account sign-in, store and employee setup, every normal availability style, draft generation and editing, publish review, employee schedule review, coverage, swaps, reports, issue handling, backup, and sign-out. Each step includes the exact account, clicks, expected result, and a saved Not run/Passed/Failed/Blocked result. The same result also updates the matching advanced test.
+
+Below the guided run are 111 advanced production flows across release configuration, authentication, invitations, availability, schedule building, publishing, coverage, swaps, reports, persistence, backups, authorization failures, and reset behavior. Use these after the normal journey for edge cases and failure paths; results persist in Neon and can be exported as CSV or JSON.
 When a new end-to-end run must begin from first login, use `Test Plan` → `Clean production UAT run`. Type `RESET CLEAN RUN` and confirm. This deliberately signs out every store test account, removes their Google account links, clears UAT workspace/normalized schedule/invite/notification/audit data, and restores the four seeded users and memberships. The clean period is dated from the current Edmonton day so availability is open for five days, release is seven days away, and the schedule begins the following day. A per-run identifier prevents an old browser tab from writing stale state back after the reset.
 Use `Report issue` from the test-mode banner or employee mobile dashboard to log UAT notes while testing. Managers can review, resolve, reopen, and export those notes from the `UAT Issues` tab.
 Employees can accept a mocked invite from their dashboard, which records the join flow without requiring live Google sign-in yet.

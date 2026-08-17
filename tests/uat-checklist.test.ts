@@ -5,6 +5,7 @@ import {
   UAT_CHECKLIST_ITEMS,
   normalizeUatChecklistProgress
 } from "@/lib/uat-checklist";
+import { GUIDED_UAT_ACCOUNTS, GUIDED_UAT_PHASES, GUIDED_UAT_STEPS } from "@/lib/guided-uat";
 import { createCleanRunTestState, createDefaultTestState, normalizeTestState } from "@/lib/test-state";
 import { CLEAN_RUN_CONFIRMATION, isCleanRunConfirmation } from "@/lib/uat-reset-shared";
 
@@ -29,6 +30,30 @@ test("checklist progress accepts only known test IDs and statuses", () => {
   });
 
   assert.deepEqual(result, { [firstId]: "passed" });
+});
+
+test("guided UAT is an ordered full schedule journey backed by advanced results", () => {
+  const advancedIds = new Set(UAT_CHECKLIST_ITEMS.map((item) => item.id));
+  const guidedIds = GUIDED_UAT_STEPS.map((step) => step.id);
+
+  assert.equal(GUIDED_UAT_PHASES.length, 9);
+  assert(GUIDED_UAT_STEPS.length >= 35);
+  assert.equal(new Set(guidedIds).size, guidedIds.length);
+  assert(GUIDED_UAT_STEPS.every((step) => advancedIds.has(step.id)));
+  assert(GUIDED_UAT_STEPS.every((step) => step.instructions.length >= 3 && step.expected.trim().length > 0));
+  assert.deepEqual(GUIDED_UAT_PHASES.map((phase) => phase.id), [
+    "guided-sign-in",
+    "guided-manager-setup",
+    "guided-availability",
+    "guided-build",
+    "guided-publish",
+    "guided-employee-review",
+    "guided-coverage",
+    "guided-swaps",
+    "guided-finish"
+  ]);
+  assert(GUIDED_UAT_ACCOUNTS.some((account) => account.role === "Manager"));
+  assert.equal(GUIDED_UAT_ACCOUNTS.filter((account) => account.role.startsWith("Employee")).length, 3);
 });
 
 test("clean production reset requires the exact typed phrase", () => {

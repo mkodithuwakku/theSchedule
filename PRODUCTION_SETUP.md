@@ -97,7 +97,9 @@ Changing a person's access is a database operation on `StoreMembership.role` and
 
 ## Production Verification
 
-Use the manager `Test Plan` tab as the source of truth. It contains 111 manually tracked production flows, including signed-out/unauthorized paths, first and repeat Google login, invite token edge cases, every availability type, builder warnings, publish retries, coverage and swap approval/rejection paths, exports, concurrency, daily/manual backup, restore, provider failures, and reset verification. Results persist through Neon and can be exported to CSV or JSON.
+Use the manager `Test Plan` tab as the source of truth. Start with `Guided Full Schedule Run`, which gives the exact account, clicks, and pass condition for the ordinary end-to-end schedule cycle: sign-in, setup, availability, generation, editing, publication, employee review, coverage, swaps, reports, issue tracking, and backup. Use four separate browser profiles for the seeded manager and three seeded employees. Guided results persist through Neon and also mark their matching advanced tests.
+
+After the guided run, use the 111-test advanced checklist for signed-out/unauthorized paths, invite token edge cases, input validation, publish retries, approval/rejection alternatives, exports, concurrency, daily/manual backup and restore, provider failures, and reset verification. Results can be exported to CSV or JSON.
 
 ### Daily schedule backup and recovery
 
@@ -109,7 +111,7 @@ Use the manager `Test Plan` tab as the source of truth. It contains 111 manually
 - Restoring changes the workspace run identifier, preventing an old open tab from writing pre-restore data over the recovered schedule.
 - The destructive clean-run workflow automatically overwrites the protected copy immediately before it clears UAT state.
 
-Start with the critical tests and use separate private browser profiles for manager and employee identities. Mark any dependency that cannot safely be simulated in production as Blocked and log a UAT issue for every Failed result.
+Start with the guided run and use separate private browser profiles for manager and employee identities. Mark any dependency that cannot safely be simulated in production as Blocked and log a UAT issue for every Failed result. Continue into the advanced list only after the ordinary schedule journey succeeds.
 
 ### Starting a clean end-to-end run
 

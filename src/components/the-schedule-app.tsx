@@ -76,6 +76,11 @@ import {
   UAT_CHECKLIST_ITEMS,
   type UatCheckStatus
 } from "@/lib/uat-checklist";
+import {
+  GUIDED_UAT_ACCOUNTS,
+  GUIDED_UAT_PHASES,
+  GUIDED_UAT_STEPS
+} from "@/lib/guided-uat";
 import { CLEAN_RUN_CONFIRMATION } from "@/lib/uat-reset-shared";
 import {
   RESTORE_WORKSPACE_CONFIRMATION,
@@ -723,6 +728,11 @@ export function TheScheduleApp({
   const completedUatItems = UAT_CHECKLIST_ITEMS.filter((item) => uatChecklist[item.id] === "passed").length;
   const failedUatItems = UAT_CHECKLIST_ITEMS.filter((item) => uatChecklist[item.id] === "failed").length;
   const blockedUatItems = UAT_CHECKLIST_ITEMS.filter((item) => uatChecklist[item.id] === "blocked").length;
+  const completedGuidedUatItems = GUIDED_UAT_STEPS.filter((item) => uatChecklist[item.id] === "passed").length;
+  const failedGuidedUatItems = GUIDED_UAT_STEPS.filter((item) => uatChecklist[item.id] === "failed").length;
+  const blockedGuidedUatItems = GUIDED_UAT_STEPS.filter((item) => uatChecklist[item.id] === "blocked").length;
+  const notRunGuidedUatItems =
+    GUIDED_UAT_STEPS.length - completedGuidedUatItems - failedGuidedUatItems - blockedGuidedUatItems;
   const normalizedUatSearch = uatSearch.trim().toLowerCase();
   const filteredUatGroups = UAT_CHECKLIST_GROUPS.map((group) => ({
     ...group,
@@ -2746,19 +2756,19 @@ export function TheScheduleApp({
             </div>
 
             <Section
-              title="Production UAT Plan"
+              title="Guided Full Schedule Run"
               icon={<Check size={18} />}
               action={
                 <Button variant="secondary" onClick={() => setActiveTab("uat-plan")}>
-                  Open all tests
+                  Open guided checklist
                 </Button>
               }
             >
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <Metric label="Passed" value={`${completedUatItems}/${UAT_CHECKLIST_ITEMS.length}`} detail="Manually verified" tone={completedUatItems === UAT_CHECKLIST_ITEMS.length ? "good" : "neutral"} />
-                <Metric label="Failed" value={String(failedUatItems)} detail="Log and retest" tone={failedUatItems ? "warn" : "good"} />
-                <Metric label="Blocked" value={String(blockedUatItems)} detail="Needs setup or dependency" tone={blockedUatItems ? "warn" : "good"} />
-                <Metric label="Not run" value={String(UAT_CHECKLIST_ITEMS.length - completedUatItems - failedUatItems - blockedUatItems)} detail={`${UAT_CHECKLIST_GROUPS.length} test groups`} />
+                <Metric label="Passed" value={`${completedGuidedUatItems}/${GUIDED_UAT_STEPS.length}`} detail="Normal production flow" tone={completedGuidedUatItems === GUIDED_UAT_STEPS.length ? "good" : "neutral"} />
+                <Metric label="Failed" value={String(failedGuidedUatItems)} detail="Log and retest" tone={failedGuidedUatItems ? "warn" : "good"} />
+                <Metric label="Blocked" value={String(blockedGuidedUatItems)} detail="Needs setup or another account" tone={blockedGuidedUatItems ? "warn" : "good"} />
+                <Metric label="Not run" value={String(notRunGuidedUatItems)} detail={`${GUIDED_UAT_PHASES.length} ordered phases`} />
               </div>
             </Section>
 
@@ -3410,14 +3420,175 @@ export function TheScheduleApp({
         {activeTab === "uat-plan" && mode === "manager" && (
           <div className="grid gap-4">
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <Metric label="Passed" value={`${completedUatItems}/${UAT_CHECKLIST_ITEMS.length}`} detail="Manually verified" tone={completedUatItems === UAT_CHECKLIST_ITEMS.length ? "good" : "neutral"} />
-              <Metric label="Failed" value={String(failedUatItems)} detail="Open an issue and retest" tone={failedUatItems ? "warn" : "good"} />
-              <Metric label="Blocked" value={String(blockedUatItems)} detail="Dependency or setup needed" tone={blockedUatItems ? "warn" : "good"} />
-              <Metric label="Not run" value={String(UAT_CHECKLIST_ITEMS.length - completedUatItems - failedUatItems - blockedUatItems)} detail={`${UAT_CHECKLIST_GROUPS.length} production areas`} />
+              <Metric label="Passed" value={`${completedGuidedUatItems}/${GUIDED_UAT_STEPS.length}`} detail="Normal production flow" tone={completedGuidedUatItems === GUIDED_UAT_STEPS.length ? "good" : "neutral"} />
+              <Metric label="Failed" value={String(failedGuidedUatItems)} detail="Open an issue and retest" tone={failedGuidedUatItems ? "warn" : "good"} />
+              <Metric label="Blocked" value={String(blockedGuidedUatItems)} detail="Dependency or spare account needed" tone={blockedGuidedUatItems ? "warn" : "good"} />
+              <Metric label="Not run" value={String(notRunGuidedUatItems)} detail={`${GUIDED_UAT_PHASES.length} ordered phases`} />
             </div>
 
             <Section
-              title="Checklist controls"
+              title="Guided Full Schedule Run"
+              icon={<Check size={18} />}
+              action={<Badge tone={completedGuidedUatItems === GUIDED_UAT_STEPS.length ? "good" : "neutral"}>{completedGuidedUatItems}/{GUIDED_UAT_STEPS.length} passed</Badge>}
+            >
+              <div className="grid gap-4">
+                <div className="rounded-lg border border-approve/30 bg-approve/5 p-4">
+                  <h2 className="font-black">This is the normal app journey to test first.</h2>
+                  <p className="mt-2 text-sm leading-6 text-ink/70">
+                    Complete the phases in order: sign in, collect availability, create the schedule, publish it, review it as
+                    employees, complete coverage and a swap, then check reports and the backup. Mark each result here when the
+                    expected outcome is true. These results also count in the advanced checklist below.
+                  </p>
+                  <div className="mt-4 h-2 overflow-hidden rounded-full bg-white">
+                    <div
+                      className="h-full rounded-full bg-approve transition-all"
+                      style={{ width: `${Math.round((completedGuidedUatItems / GUIDED_UAT_STEPS.length) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid gap-3 lg:grid-cols-[1.1fr_0.9fr]">
+                  <div className="rounded-lg border border-warn bg-warn/10 p-4">
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle className="mt-0.5 shrink-0 text-warn" size={20} />
+                      <div>
+                        <div className="font-black">Need first-time logins and an empty run?</div>
+                        <p className="mt-1 text-sm leading-6 text-ink/70">
+                          Use Clean production UAT run below before marking Step 1. It backs up the schedule first, clears all test
+                          progress and sessions, and restores these four seeded identities. Do not reset in the middle of this guide.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-line bg-paper p-4">
+                    <div className="text-xs font-semibold uppercase tracking-normal text-ink/50">Browser setup</div>
+                    <div className="mt-2 grid gap-2 text-sm">
+                      {GUIDED_UAT_ACCOUNTS.map((account) => (
+                        <div key={account.email} className="grid gap-0.5 sm:grid-cols-[7rem_1fr]">
+                          <span className="font-black">{account.role}</span>
+                          <span className="break-all text-ink/65">{account.email}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {GUIDED_UAT_PHASES.map((phase, phaseIndex) => {
+                  const phasePassed = phase.steps.filter((step) => uatChecklist[step.id] === "passed").length;
+                  return (
+                    <details
+                      key={phase.id}
+                      className="rounded-lg border border-line bg-white shadow-panel"
+                      defaultOpen={phaseIndex === 0}
+                    >
+                      <summary className="cursor-pointer list-none px-4 py-4 marker:hidden">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <h2 className="font-black">{phase.title}</h2>
+                            <p className="mt-1 text-sm text-ink/60">{phase.description}</p>
+                          </div>
+                          <Badge tone={phasePassed === phase.steps.length ? "good" : "neutral"}>{phasePassed}/{phase.steps.length} passed</Badge>
+                        </div>
+                      </summary>
+                      <div className="grid gap-3 border-t border-line p-4">
+                        {phase.steps.map((step) => {
+                          const status = uatChecklist[step.id] ?? "not_run";
+                          const stepNumber = GUIDED_UAT_STEPS.findIndex((item) => item.id === step.id) + 1;
+                          return (
+                            <article
+                              key={step.id}
+                              className={cx(
+                                "rounded-lg border p-4",
+                                status === "passed" && "border-approve/30 bg-approve/5",
+                                status === "failed" && "border-red-500/40 bg-red-500/5",
+                                status === "blocked" && "border-warn bg-warn/5",
+                                status === "not_run" && "border-line"
+                              )}
+                            >
+                              <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <Badge tone="good">Step {stepNumber}</Badge>
+                                    <h3 className="font-black">{step.title}</h3>
+                                    <Badge>{step.actor}</Badge>
+                                    {step.optional && <Badge tone="warn">Spare account</Badge>}
+                                  </div>
+                                  {step.account && <div className="mt-2 break-all text-xs font-semibold text-ink/55">Use: {step.account}</div>}
+                                  <div className="mt-3 text-xs font-semibold uppercase tracking-normal text-ink/50">Click by click</div>
+                                  <ol className="mt-2 grid gap-1 pl-5 text-sm leading-6 text-ink/75">
+                                    {step.instructions.map((instruction) => (
+                                      <li key={instruction} className="list-decimal">{instruction}</li>
+                                    ))}
+                                  </ol>
+                                  <div className="mt-3 rounded-md bg-paper p-3 text-sm leading-6">
+                                    <span className="font-black">Pass when: </span>
+                                    {step.expected}
+                                  </div>
+                                </div>
+                                <div className="grid shrink-0 gap-2 xl:w-52">
+                                  {step.target && (
+                                    <Button
+                                      variant="secondary"
+                                      onClick={() => {
+                                        setMode(step.target!.mode);
+                                        setActiveTab(step.target!.tab);
+                                      }}
+                                    >
+                                      {step.target.label}
+                                    </Button>
+                                  )}
+                                  <Field label="Result">
+                                    <select
+                                      className={inputBase}
+                                      value={status}
+                                      onChange={(event) => setUatCheckStatus(step.id, event.target.value as UatCheckStatus)}
+                                    >
+                                      <option value="not_run">Not run</option>
+                                      <option value="passed">Passed</option>
+                                      <option value="failed">Failed</option>
+                                      <option value="blocked">Blocked</option>
+                                    </select>
+                                  </Field>
+                                  {status === "failed" && (
+                                    <Button
+                                      variant="secondary"
+                                      onClick={() => {
+                                        setIssueForm({ category: "other", note: `Failed guided step ${stepNumber} - ${step.title}: ` });
+                                        setShowIssueReporter(true);
+                                      }}
+                                    >
+                                      <ClipboardList size={16} />
+                                      Log issue
+                                    </Button>
+                                  )}
+                                </div>
+                              </div>
+                            </article>
+                          );
+                        })}
+                      </div>
+                    </details>
+                  );
+                })}
+              </div>
+            </Section>
+
+            <div className="rounded-lg border border-line bg-paper p-4">
+              <h2 className="font-black">Advanced and edge-case checklist</h2>
+              <p className="mt-1 text-sm leading-6 text-ink/65">
+                After the guided run works, use the {UAT_CHECKLIST_ITEMS.length} tests below for invalid input, permissions,
+                failure recovery, concurrency, and rare production conditions.
+              </p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <Metric label="Advanced passed" value={`${completedUatItems}/${UAT_CHECKLIST_ITEMS.length}`} detail="Includes guided results" tone={completedUatItems === UAT_CHECKLIST_ITEMS.length ? "good" : "neutral"} />
+                <Metric label="Advanced failed" value={String(failedUatItems)} detail="Log and retest" tone={failedUatItems ? "warn" : "good"} />
+                <Metric label="Advanced blocked" value={String(blockedUatItems)} detail="Needs setup" tone={blockedUatItems ? "warn" : "good"} />
+                <Metric label="Advanced not run" value={String(UAT_CHECKLIST_ITEMS.length - completedUatItems - failedUatItems - blockedUatItems)} detail={`${UAT_CHECKLIST_GROUPS.length} areas`} />
+              </div>
+            </div>
+
+            <Section
+              title="Advanced checklist controls"
               icon={<ClipboardList size={18} />}
               action={
                 <div className="flex flex-wrap gap-2">
