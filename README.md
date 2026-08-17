@@ -12,12 +12,13 @@ The app is based on the uploaded Store Scheduler SRS and includes:
 - Prisma PostgreSQL schema for users, stores, memberships, periods, availability, shifts, coverage, swaps, snapshots, notifications, and audit logs
 - Database-backed employee invitation records and invite acceptance route for hosted UAT
 - Neon-backed shared workspace state for hosted manager and employee use
+- Bounded daily schedule protection in Neon: one verified snapshot per store, overwritten daily, with manager backup-now and guarded restore controls
 - Men Are From Mars default store hours and shift templates
 - Saved light/dark theme preference per test identity
 - Documented future path for multi-store expansion with store-specific branding, employees, schedules, and themes
 - Manager dashboard, employee management, availability tracker, schedule builder, coverage/swap approvals, hours report, CSV export, print view, and settings
 - Employee dashboard, availability submission, my shifts, full team schedule, coverage offers, and swap requests
-- Production UAT test plan with 105 manually tracked flows, search/filtering, and CSV/JSON result export
+- Production UAT test plan with 111 manually tracked flows, search/filtering, and CSV/JSON result export
 - Manager-only clean-run reset that restores seeded identities while clearing UAT data, OAuth links, sessions, and notification deduplication
 - Development-only scenario presets for quickly loading common workflow states
 - UAT issue tracker with status toggles and CSV/JSON export
@@ -76,7 +77,7 @@ The workspace persists through Neon. Browser storage remains only a temporary re
 Schedule views render as Sunday-start calendar weeks.
 In the manager builder, click a shift to open the assignment panel, use `Unassigned` to filter unassigned shifts, and `Publish` warns before publishing with unassigned shifts.
 Coverage requests and shift swaps are included in the saved test state, so they survive refreshes and can be tested across manager/employee role switches.
-The manager `Test Plan` tab contains 105 production flows across release configuration, authentication, invitations, availability, schedule building, publishing, coverage, swaps, reports, persistence, authorization failures, and reset behavior. Mark each flow Not run, Passed, Failed, or Blocked; progress is saved in Neon and can be exported as CSV or JSON.
+The manager `Test Plan` tab contains 111 production flows across release configuration, authentication, invitations, availability, schedule building, publishing, coverage, swaps, reports, persistence, backups, authorization failures, and reset behavior. Mark each flow Not run, Passed, Failed, or Blocked; progress is saved in Neon and can be exported as CSV or JSON.
 When a new end-to-end run must begin from first login, use `Test Plan` → `Clean production UAT run`. Type `RESET CLEAN RUN` and confirm. This deliberately signs out every store test account, removes their Google account links, clears UAT workspace/normalized schedule/invite/notification/audit data, and restores the four seeded users and memberships. The clean period is dated from the current Edmonton day so availability is open for five days, release is seven days away, and the schedule begins the following day. A per-run identifier prevents an old browser tab from writing stale state back after the reset.
 Use `Report issue` from the test-mode banner or employee mobile dashboard to log UAT notes while testing. Managers can review, resolve, reopen, and export those notes from the `UAT Issues` tab.
 Employees can accept a mocked invite from their dashboard, which records the join flow without requiring live Google sign-in yet.
@@ -126,7 +127,8 @@ CRON_SECRET="replace-with-a-long-random-secret"
 
 Email helpers return `queued` when Resend is not configured, which keeps development safe while preserving notification log semantics.
 The manager header and Settings screen include a test email action. Without `RESEND_API_KEY`, the app logs notifications as queued; with Resend configured, the same action attempts a real send.
-The secured Vercel Cron route runs daily and sends one availability request to every active store member exactly three Edmonton calendar days before the schedule release date. `CRON_SECRET` authorizes that route.
+The secured Vercel Cron route runs daily, overwrites each store's single protected schedule snapshot, and sends one availability request to every active store member exactly three Edmonton calendar days before the schedule release date. `CRON_SECRET` authorizes that route.
+Managers can inspect the latest backup in Settings, create one immediately, or restore it by typing `RESTORE LATEST BACKUP`. Restore verifies a SHA-256 integrity fingerprint and creates a new workspace run identifier so stale tabs cannot overwrite recovered data. A clean-run reset also refreshes this protected copy immediately before deleting UAT state.
 Publishing sends one consolidated email per active member, including all assigned shifts and a link to the hosted application. Notification logs store deterministic deduplication keys, Resend delivery IDs, queued/sent/failed status, and failure reasons.
 Reported UAT issues and notification delivery failures are sent to the owner alert email, defaulting to `m.kodithuwakku803@gmail.com`. Real delivery still requires `RESEND_API_KEY`; otherwise those owner alerts are recorded as queued.
 

@@ -821,6 +821,57 @@ export const UAT_CHECKLIST_GROUPS: UatChecklistGroup[] = [
         expected: "The old session is invalid and stale localStorage cannot repopulate the clean Neon workspace.",
         critical: true,
         cleanRunRecommended: true
+      },
+      {
+        id: "persistence-backup-manual",
+        title: "Manager creates an immediate schedule backup",
+        actor: "Manager",
+        steps: ["Make a recognizable schedule assignment and wait for Saved.", "Open Settings and select Back up now.", "Confirm the latest protected-copy time, version, and integrity identifier update."],
+        expected: "A protected Neon snapshot is created for the active store without changing the live schedule.",
+        critical: true
+      },
+      {
+        id: "persistence-backup-overwrite",
+        title: "Repeated backups replace the prior snapshot",
+        actor: "Manager",
+        steps: ["Record the latest backup time and integrity identifier.", "Change one schedule assignment, wait for Saved, and select Back up now again.", "Confirm the backup metadata changes and the service still reports one latest protected copy."],
+        expected: "The same store backup row is overwritten; repeated daily/manual runs do not accumulate backup files or rows.",
+        critical: true
+      },
+      {
+        id: "persistence-backup-daily",
+        title: "Daily cron refreshes the protected snapshot",
+        actor: "System",
+        steps: ["Make and save a recognizable schedule change.", "Wait for or securely invoke the configured daily cron.", "Reload Settings and inspect the latest protected-copy metadata."],
+        expected: "The cron response reports one snapshot written and the latest backup reflects the saved workspace.",
+        critical: true
+      },
+      {
+        id: "persistence-backup-restore",
+        title: "Manager restores the latest protected schedule",
+        actor: "Manager",
+        steps: ["Create a manual backup with a recognizable assignment.", "Change that assignment and wait for Saved.", "Type RESTORE LATEST BACKUP exactly, confirm restore, and let the page reload."],
+        expected: "The backed-up assignment returns, unrelated current workspace changes are replaced, and the backup remains available.",
+        critical: true,
+        cleanRunRecommended: true
+      },
+      {
+        id: "persistence-backup-stale-tab",
+        title: "Old tabs cannot overwrite restored data",
+        actor: "Manager + employee",
+        steps: ["Keep a second browser open on the pre-restore workspace.", "Restore a backup as manager in the first browser.", "Try to save from the stale second browser, then refresh it."],
+        expected: "The stale save receives a conflict and the refreshed browser loads the restored Neon workspace.",
+        critical: true,
+        cleanRunRecommended: true
+      },
+      {
+        id: "persistence-backup-before-reset",
+        title: "Clean reset preserves the pre-reset schedule",
+        actor: "Manager",
+        steps: ["Create a recognizable schedule and note its backup metadata.", "Run Clean production UAT run.", "Sign in again and inspect Schedule Backup in Settings before creating another backup."],
+        expected: "The latest protected copy is the workspace from immediately before the destructive reset and can be restored if needed.",
+        critical: true,
+        cleanRunRecommended: true
       }
     ]
   },

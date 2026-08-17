@@ -77,6 +77,10 @@ import {
   type UatCheckStatus
 } from "@/lib/uat-checklist";
 import { CLEAN_RUN_CONFIRMATION } from "@/lib/uat-reset-shared";
+import {
+  RESTORE_WORKSPACE_CONFIRMATION,
+  type WorkspaceBackupStatus
+} from "@/lib/workspace-backup-shared";
 
 type TabId =
   | "dashboard"
@@ -595,6 +599,9 @@ export function TheScheduleApp({
   const [hidePassedUat, setHidePassedUat] = useState(false);
   const [cleanResetConfirmation, setCleanResetConfirmation] = useState("");
   const [cleanResetStatus, setCleanResetStatus] = useState<"idle" | "resetting" | "error">("idle");
+  const [backupStatus, setBackupStatus] = useState<WorkspaceBackupStatus | null>(null);
+  const [backupAction, setBackupAction] = useState<"idle" | "backing_up" | "restoring" | "error">("idle");
+  const [restoreConfirmation, setRestoreConfirmation] = useState("");
   const [availabilityForm, setAvailabilityForm] = useState({
     date: period.startDate,
     unavailableType: "full_day" as UnavailableType,
@@ -939,6 +946,25 @@ export function TheScheduleApp({
     document.documentElement.dataset.theme = currentTheme;
     window.localStorage.setItem("the-schedule-theme", currentTheme);
   }, [currentTheme]);
+
+  useEffect(() => {
+    if (!isManager) return;
+    let cancelled = false;
+
+    void fetch("/api/backups/workspace", { cache: "no-store" })
+      .then(async (response) => {
+        const result = (await response.json()) as { backup?: WorkspaceBackupStatus; error?: string };
+        if (!response.ok) throw new Error(result.error ?? "Unable to load backup status.");
+        if (!cancelled) setBackupStatus(result.backup ?? { exists: false });
+      })
+      .catch(() => {
+        if (!cancelled) setBackupAction("error");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isManager]);
 
   function addAudit(action: string, entityType: string, entityId: string, summary: string, actorId = "emp_manager") {
     setAuditLog((current) => [
@@ -2277,6 +2303,74 @@ export function TheScheduleApp({
       setCleanResetStatus("error");
       setHasLoadedStoredState(true);
       window.alert(error instanceof Error ? error.message : "Unable to reset production UAT.");
+    }
+  }
+
+  async function backUpWorkspaceNow() {
+    if (!isManager) return;
+    setBackupAction("backing_up");
+    try {
+      const snapshot: StoredTestState = {
+        uatRunId,
+        people,
+        period,
+        shifts,
+        availability,
+        coverage,
+        swaps,
+        auditLog,
+        notifications,
+        availabilityDrafts,
+        preferences,
+        uatIssues,
+        inviteAcceptances,
+        uatChecklist
+      };
+      const saveResponse = await fetch("/api/test-state", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(snapshot)
+      });
+      if (!saveResponse.ok) {
+        const saveResult = (await saveResponse.json().catch(() => ({}))) as { error?: string };
+        throw new Error(saveResult.error ?? "The latest schedule could not be saved before backup.");
+      }
+
+      const response = await fetch("/api/backups/workspace", { method: "POST" });
+      const result = (await response.json()) as { backup?: WorkspaceBackupStatus; error?: string };
+      if (!response.ok || !result.backup) throw new Error(result.error ?? "Unable to back up the schedule.");
+      setBackupStatus(result.backup);
+      setBackupAction("idle");
+    } catch (error) {
+      setBackupAction("error");
+      window.alert(error instanceof Error ? error.message : "Unable to back up the schedule.");
+    }
+  }
+
+  async function restoreWorkspaceFromBackup() {
+    if (!isManager || restoreConfirmation !== RESTORE_WORKSPACE_CONFIRMATION) return;
+    const confirmed = window.confirm(
+      "Restore the latest schedule backup? This replaces the current schedule workspace and prevents older open tabs from overwriting the recovery."
+    );
+    if (!confirmed) return;
+
+    setBackupAction("restoring");
+    setHasLoadedStoredState(false);
+    try {
+      const response = await fetch("/api/backups/workspace", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmation: restoreConfirmation })
+      });
+      const result = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(result.error ?? "Unable to restore the schedule backup.");
+
+      window.localStorage.removeItem(STORAGE_KEY);
+      window.location.assign("/?restored=complete");
+    } catch (error) {
+      setBackupAction("error");
+      setHasLoadedStoredState(true);
+      window.alert(error instanceof Error ? error.message : "Unable to restore the schedule backup.");
     }
   }
 
@@ -3657,7 +3751,7 @@ export function TheScheduleApp({
         )}
 
         {activeTab === "settings" && mode === "manager" && (
-          <div className="grid gap-4 xl:grid-cols-4">
+          <div className="grid gap-4 xl:grid-cols-2 2xl:grid-cols-5">
             <Section title="Store Hours" icon={<Settings size={18} />}>
               <div className="grid gap-2">
                 {storeHours.map((hours) => (
@@ -3730,6 +3824,58 @@ export function TheScheduleApp({
                   {testEmailStatus === "sent" && <div className="mt-2 text-sm font-semibold text-approve">Notification logged.</div>}
                   {testEmailStatus === "error" && <div className="mt-2 text-sm font-semibold text-red-700">Notification failed.</div>}
                 </div>
+              </div>
+            </Section>
+            <Section title="Schedule Backup" icon={<ShieldCheck size={18} />}>
+              <div className="grid gap-3">
+                <div className="rounded-lg border border-line bg-paper p-3 text-sm">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="font-black">Latest protected copy</div>
+                    <Badge tone={backupStatus?.exists ? "good" : "warn"}>
+                      {backupStatus === null ? "checking" : backupStatus.exists ? "available" : "not created"}
+                    </Badge>
+                  </div>
+                  {backupStatus?.exists ? (
+                    <div className="mt-2 grid gap-1 text-ink/65">
+                      <div>{backupStatus.backedUpAt ? new Date(backupStatus.backedUpAt).toLocaleString() : "Time unavailable"}</div>
+                      <div>
+                        {backupStatus.reason?.replaceAll("_", " ")} · version {backupStatus.sourceVersion} · {Math.max(1, Math.ceil((backupStatus.byteSize ?? 0) / 1024))} KB
+                      </div>
+                      <div className="font-mono text-xs">Integrity {backupStatus.checksum?.slice(0, 12)}</div>
+                    </div>
+                  ) : (
+                    <div className="mt-2 text-ink/65">Create the first protected copy now. The daily job will replace it afterward.</div>
+                  )}
+                </div>
+                <div className="rounded-lg border border-line p-3 text-sm text-ink/65">
+                  Runs daily at 16:00 UTC. Only one snapshot is kept per store, so each run overwrites the previous copy instead of consuming more space every day.
+                </div>
+                <Button onClick={() => void backUpWorkspaceNow()} disabled={backupAction === "backing_up" || backupAction === "restoring"}>
+                  <ShieldCheck size={16} />
+                  {backupAction === "backing_up" ? "Backing up" : "Back up now"}
+                </Button>
+                <div className="rounded-lg border border-warn/40 bg-warn/5 p-3">
+                  <div className="text-sm font-black">Restore protected copy</div>
+                  <div className="mt-1 text-xs text-ink/65">This replaces the current schedule. Type the exact phrase below.</div>
+                  <div className="mt-2 rounded-md bg-paper px-3 py-2 font-mono text-xs font-bold">{RESTORE_WORKSPACE_CONFIRMATION}</div>
+                  <input
+                    className={`${inputBase} mt-2`}
+                    value={restoreConfirmation}
+                    onChange={(event) => setRestoreConfirmation(event.target.value)}
+                    placeholder={RESTORE_WORKSPACE_CONFIRMATION}
+                    autoComplete="off"
+                  />
+                  <Button
+                    className="mt-2 w-full"
+                    variant="secondary"
+                    onClick={() => void restoreWorkspaceFromBackup()}
+                    disabled={!backupStatus?.exists || restoreConfirmation !== RESTORE_WORKSPACE_CONFIRMATION || backupAction === "restoring"}
+                  >
+                    <RefreshCw size={16} />
+                    {backupAction === "restoring" ? "Restoring" : "Restore latest backup"}
+                  </Button>
+                </div>
+                {backupAction === "error" && <div className="text-sm font-semibold text-red-700">Backup service needs attention.</div>}
               </div>
             </Section>
           </div>

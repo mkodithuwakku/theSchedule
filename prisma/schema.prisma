@@ -110,12 +110,12 @@ model VerificationToken {
 }
 
 model Store {
-  id                       String               @id @default(cuid())
+  id                       String                @id @default(cuid())
   name                     String
-  timezone                 String               @default("America/Edmonton")
-  releaseDays              Int[]                @default([14, 31])
-  availabilityOpenDays     Int                  @default(5)
-  availabilityDeadlineDays Int                  @default(2)
+  timezone                 String                @default("America/Edmonton")
+  releaseDays              Int[]                 @default([14, 31])
+  availabilityOpenDays     Int                   @default(5)
+  availabilityDeadlineDays Int                   @default(2)
   memberships              StoreMembership[]
   periods                  SchedulePeriod[]
   shifts                   Shift[]
@@ -125,8 +125,9 @@ model Store {
   notifications            NotificationLog[]
   auditLogs                AuditLog[]
   workspaceState           StoreWorkspaceState?
-  createdAt                DateTime             @default(now())
-  updatedAt                DateTime             @updatedAt
+  workspaceBackup          StoreWorkspaceBackup?
+  createdAt                DateTime              @default(now())
+  updatedAt                DateTime              @updatedAt
 }
 
 model StoreWorkspaceState {
@@ -136,6 +137,23 @@ model StoreWorkspaceState {
   store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model StoreWorkspaceBackup {
+  storeId         String    @id
+  data            Json
+  sourceVersion   Int
+  sourceRunId     String
+  sourceUpdatedAt DateTime
+  reason          String
+  checksum        String
+  byteSize        Int
+  backedUpAt      DateTime
+  restoredAt      DateTime?
+  restoreCount    Int       @default(0)
+  store           Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 }
 
 model StoreMembership {

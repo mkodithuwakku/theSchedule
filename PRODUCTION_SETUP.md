@@ -11,6 +11,7 @@ This is the checklist for hosting The Schedule on a real HTTPS URL so invite lin
 - Real invite acceptance route: `/api/invites/accept?token=...`.
 - Resend email delivery support for invites, notifications, and owner alerts.
 - The hosted schedule workspace is persisted in Neon through `StoreWorkspaceState`, rather than Vercel's temporary filesystem.
+- `StoreWorkspaceBackup` keeps exactly one integrity-checked snapshot per store. The daily cron and manual backup control overwrite that row instead of accumulating files.
 - The signed-in Google email is bound to one employee identity. Employees cannot switch identities or open manager tools.
 - Manager-only checks protect employee invites, schedule resets, reports, manager state changes, and unrestricted notification sends at the API layer.
 - Production environment templates in `.env.production.example`.
@@ -79,9 +80,9 @@ Changing a person's access is a database operation on `StoreMembership.role` and
    npm run prisma:deploy
    ```
 
-   Run both commands with the production `DATABASE_URL`. `0_init` records the tables already present without recreating them; `prisma:deploy` then applies only the new notification-delivery fields.
+   Run both commands with the production `DATABASE_URL`. `0_init` records the tables already present without recreating them; `prisma:deploy` then applies pending notification and workspace-backup migrations.
 
-   Vercel runs `/api/cron/schedule-rollout` daily at 16:00 UTC. The route calculates the date in `America/Edmonton`, sends availability requests exactly three calendar days before release, and uses database deduplication records to skip retries that have already been processed.
+   Vercel runs `/api/cron/schedule-rollout` daily at 16:00 UTC. The route overwrites the one `StoreWorkspaceBackup` row for each store while also calculating the date in `America/Edmonton`, sending availability requests exactly three calendar days before release, and using database deduplication records to skip retries that have already been processed.
 
 6. Seed the store and manager.
    `SEED_MANAGER_EMAIL` should stay as `m.kodithuwakku803@gmail.com` unless the manager account changes.
@@ -96,7 +97,16 @@ Changing a person's access is a database operation on `StoreMembership.role` and
 
 ## Production Verification
 
-Use the manager `Test Plan` tab as the source of truth. It contains 105 manually tracked production flows, including signed-out/unauthorized paths, first and repeat Google login, invite token edge cases, every availability type, builder warnings, publish retries, coverage and swap approval/rejection paths, exports, concurrency, provider failures, and reset verification. Results persist through Neon and can be exported to CSV or JSON.
+Use the manager `Test Plan` tab as the source of truth. It contains 111 manually tracked production flows, including signed-out/unauthorized paths, first and repeat Google login, invite token edge cases, every availability type, builder warnings, publish retries, coverage and swap approval/rejection paths, exports, concurrency, daily/manual backup, restore, provider failures, and reset verification. Results persist through Neon and can be exported to CSV or JSON.
+
+### Daily schedule backup and recovery
+
+- The Vercel cron ensures every store has a workspace, then overwrites one snapshot per store every day; storage does not grow by one file or row per run.
+- Open `Settings` → `Schedule Backup` to verify the latest time, source version, size, and integrity identifier.
+- Select `Back up now` after an important mid-day schedule change when you do not want to wait for the daily run.
+- To recover, type `RESTORE LATEST BACKUP` exactly and confirm. The server verifies the saved checksum before replacing the workspace.
+- Restoring changes the workspace run identifier, preventing an old open tab from writing pre-restore data over the recovered schedule.
+- The destructive clean-run workflow automatically overwrites the protected copy immediately before it clears UAT state.
 
 Start with the critical tests and use separate private browser profiles for manager and employee identities. Mark any dependency that cannot safely be simulated in production as Blocked and log a UAT issue for every Failed result.
 

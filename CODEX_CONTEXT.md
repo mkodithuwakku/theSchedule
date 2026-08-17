@@ -21,14 +21,15 @@ The current product goal is hosted, authenticated UAT with Google identities and
 - `src/lib/demo-data.ts` holds seeded business data, scheduling helpers, availability conflict logic, hours calculations, and notification/log types.
 - `src/lib/test-state-shared.ts` defines the persisted JSON test-state contract used by the client and API route.
 - `src/lib/test-state.ts` normalizes the JSON-backed test-state payload.
-- `src/lib/uat-checklist.ts` defines the 105-flow production UAT plan and validates persisted manual results.
+- `src/lib/uat-checklist.ts` defines the 111-flow production UAT plan and validates persisted manual results.
 - `src/lib/uat-reset.ts` performs the manager-only clean-run reset, restores seeded identities, clears OAuth/session and UAT artifacts, and creates a new run identifier.
 - `src/lib/auth.ts` configures Google/Auth.js and permits verified Google identities to link to pre-seeded or invited user records on first login.
 - `src/lib/access.ts` resolves the signed-in Google account to an active Neon store membership.
 - `src/lib/workspace-state.ts` persists and role-filters the shared schedule workspace in Neon.
+- `src/lib/workspace-backup.ts` keeps one overwritten, SHA-256-verified workspace snapshot per store and performs guarded restores with stale-tab invalidation.
 - `src/app/api/test-state/route.ts` requires authentication, allows managers full writes, and sanitizes employee writes to their own permitted workflow data.
 - `src/app/api/notifications/test-email/route.ts` handles test notification sends/logging.
-- `src/app/api/cron/schedule-rollout/route.ts` is the `CRON_SECRET`-protected daily Vercel job that sends availability requests three Edmonton calendar days before release.
+- `src/app/api/cron/schedule-rollout/route.ts` is the `CRON_SECRET`-protected daily Vercel job that overwrites each store's protected schedule snapshot and sends availability requests three Edmonton calendar days before release.
 - `src/app/api/schedule/publish/route.ts` is the manager-only publication path that persists publication and sends one consolidated schedule email per active member.
 - `src/lib/schedule-rollout.ts` contains pure Edmonton date, recipient, consolidation, and retry-deduplication planning logic.
 - `src/lib/schedule-notifications.ts` connects rollout plans to Prisma notification claims and Resend delivery.
@@ -92,7 +93,8 @@ Important UX expectations from the user:
 
 - Test-mode scenario buttons: Fresh pre-release, Availability submitted, Draft generated, Published.
 - Server-backed test persistence through `/api/test-state`, with browser localStorage fallback.
-- Production-visible 105-flow manager UAT plan with manual status tracking, filtering, and CSV/JSON export.
+- Production-visible 111-flow manager UAT plan with manual status tracking, filtering, and CSV/JSON export.
+- One bounded Neon schedule backup per store, overwritten daily or on demand, automatically refreshed before destructive resets, and restorable by an active manager.
 - Manager-only clean-run reset for first-login retesting, guarded by typed confirmation and stale-run write rejection.
 - UAT issue tracker and exports.
 - Notification preview center and notification log.

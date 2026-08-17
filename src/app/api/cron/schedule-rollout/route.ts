@@ -1,4 +1,5 @@
 import { sendDueAvailabilityReminders } from "@/lib/schedule-notifications";
+import { overwriteAllWorkspaceBackups } from "@/lib/workspace-backup";
 
 export const dynamic = "force-dynamic";
 
@@ -8,11 +9,18 @@ export async function GET(request: Request) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const storeResults = await sendDueAvailabilityReminders();
+  const [backups, storeResults] = await Promise.all([
+    overwriteAllWorkspaceBackups(),
+    sendDueAvailabilityReminders()
+  ]);
   const deliveries = storeResults.flatMap((result) => result.deliveries);
   return Response.json({
     ok: true,
     storesProcessed: storeResults.length,
+    backups: {
+      storesProcessed: backups.length,
+      snapshotsWritten: backups.filter((backup) => backup.exists).length
+    },
     deliveries: {
       attempted: deliveries.filter((delivery) => !delivery.duplicate).length,
       sent: deliveries.filter((delivery) => delivery.status === "sent" && !delivery.duplicate).length,

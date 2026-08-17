@@ -2,6 +2,7 @@ import type { AuditEntry, CoverageRequest, NotificationEntry, SwapRequest } from
 import { prisma } from "@/lib/prisma";
 import { createDefaultTestState, normalizeTestState } from "@/lib/test-state";
 import type { StoredTestState, UatIssue } from "@/lib/test-state-shared";
+import { overwriteWorkspaceBackup } from "@/lib/workspace-backup";
 
 function jsonValue<T>(value: T) {
   return JSON.parse(JSON.stringify(value));
@@ -62,6 +63,7 @@ export async function writeWorkspaceState(storeId: string, state: Partial<Stored
 }
 
 export async function resetWorkspaceState(storeId: string) {
+  await overwriteWorkspaceBackup(storeId, "pre_reset");
   const cleanState = createDefaultTestState();
   await prisma.storeWorkspaceState.upsert({
     where: { storeId },

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Prisma, ScheduleStatus, UserRole } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { createCleanRunTestState } from "@/lib/test-state";
+import { overwriteWorkspaceBackupWithClient } from "@/lib/workspace-backup";
 export { CLEAN_RUN_CONFIRMATION, isCleanRunConfirmation } from "@/lib/uat-reset-shared";
 
 export const CANONICAL_UAT_USERS = [
@@ -22,6 +23,9 @@ export async function resetProductionUat(storeId: string) {
       select: { id: true }
     });
     if (!store) throw new Error("The active store no longer exists.");
+
+    // Preserve the current schedule before any destructive clean-run work.
+    await overwriteWorkspaceBackupWithClient(transaction, storeId, "pre_reset");
 
     const [memberships, invitations] = await Promise.all([
       transaction.storeMembership.findMany({
