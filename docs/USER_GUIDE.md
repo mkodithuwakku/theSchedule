@@ -12,6 +12,8 @@ This guide describes normal actions a manager or employee performs in The Schedu
 
 An unapproved account sees an access message and no schedule data. If Google is already signed into the wrong account, sign out of the application and use a separate browser profile or private window.
 
+Approved users receive a rolling ten-year browser session. They normally remain signed in on the same browser unless they sign out, clear browser data, a manager deactivates their access, or a clean UAT reset removes active sessions.
+
 ## Manager navigation
 
 Managers have these primary areas:

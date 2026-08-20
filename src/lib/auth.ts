@@ -6,10 +6,15 @@ import { prisma } from "@/lib/prisma";
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
   session: {
-    strategy: "database"
+    strategy: "database",
+    // Keep approved employees signed in on the same browser long-term.
+    // Every active visit rolls the expiry forward; access is still checked
+    // against the current user and store membership on every page request.
+    maxAge: 10 * 365 * 24 * 60 * 60,
+    updateAge: 24 * 60 * 60,
   },
   pages: {
-    signIn: "/"
+    signIn: "/",
   },
   providers: [
     GoogleProvider({
@@ -17,8 +22,8 @@ export const authOptions: NextAuthOptions = {
       clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
       // Seeded and invited users already exist before their first Google login.
       // Google verifies the email, so link that OAuth identity to the approved user.
-      allowDangerousEmailAccountLinking: true
-    })
+      allowDangerousEmailAccountLinking: true,
+    }),
   ],
   callbacks: {
     async signIn({ user }) {
@@ -30,9 +35,9 @@ export const authOptions: NextAuthOptions = {
           active: true,
           user: {
             email,
-            active: true
-          }
-        }
+            active: true,
+          },
+        },
       });
 
       if (membership) return true;
@@ -42,9 +47,9 @@ export const authOptions: NextAuthOptions = {
           email,
           acceptedAt: null,
           expiresAt: {
-            gt: new Date()
-          }
-        }
+            gt: new Date(),
+          },
+        },
       });
 
       return Boolean(invitation);
@@ -57,6 +62,6 @@ export const authOptions: NextAuthOptions = {
       }
 
       return session;
-    }
-  }
+    },
+  },
 };

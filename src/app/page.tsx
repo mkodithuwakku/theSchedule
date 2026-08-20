@@ -7,21 +7,32 @@ import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
-export default async function Home() {
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
+  const { error } = await searchParams;
   const session = await getServerSession(authOptions);
-  if (!session?.user?.email) return <AccessScreen />;
+  if (!session?.user?.email) return <AccessScreen authError={error} />;
 
   const access = await getCurrentAccess();
-  if (!access) return <AccessScreen signedInEmail={normalizeEmail(session.user.email)} />;
+  if (!access)
+    return <AccessScreen signedInEmail={normalizeEmail(session.user.email)} />;
 
   const memberships = await prisma.storeMembership.findMany({
     where: { storeId: access.storeId, active: true, user: { active: true } },
-    select: { user: { select: { email: true } } }
+    select: { user: { select: { email: true } } },
   });
   const activeMemberEmails = memberships
     .map((membership) => membership.user.email)
     .filter((email): email is string => Boolean(email))
     .map(normalizeEmail);
 
-  return <TheScheduleApp currentUser={access} activeMemberEmails={activeMemberEmails} />;
+  return (
+    <TheScheduleApp
+      currentUser={access}
+      activeMemberEmails={activeMemberEmails}
+    />
+  );
 }
