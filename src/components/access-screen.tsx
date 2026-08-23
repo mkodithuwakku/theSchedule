@@ -1,7 +1,6 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
 import {
   AlertCircle,
   ArrowRight,
@@ -9,14 +8,12 @@ import {
   Clock3,
   LockKeyhole,
   LogOut,
-  Smartphone,
   UsersRound,
 } from "lucide-react";
 import { signIn, signOut } from "next-auth/react";
 import { useState } from "react";
 
 type AccessScreenProps = {
-  allowEmployeePreview?: boolean;
   authError?: string;
   signedInEmail?: string;
 };
@@ -106,31 +103,12 @@ function ProductOverview() {
   );
 }
 
-function EmployeePreviewLink() {
-  return (
-    <>
-      <Link
-        className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-[#9fb0c2] bg-white px-4 text-sm font-extrabold text-[#0f62a3] transition hover:border-[#0f62a3] hover:bg-[#e8f3fb]"
-        href="/?employeePreview=1"
-      >
-        <Smartphone size={18} />
-        Preview employee mobile UI
-      </Link>
-      <p className="mt-2 text-center text-xs leading-5 text-[#697386]">
-        Temporary sample data. No Google account required.
-      </p>
-    </>
-  );
-}
-
 function MobileAccessScreen({
-  allowEmployeePreview,
   hasAuthError,
   isRedirecting,
   signedInEmail,
   onGoogleSignIn,
 }: {
-  allowEmployeePreview: boolean;
   hasAuthError: boolean;
   isRedirecting: boolean;
   signedInEmail?: string;
@@ -245,19 +223,13 @@ function MobileAccessScreen({
               </button>
             </>
           )}
-
-          {allowEmployeePreview ? <EmployeePreviewLink /> : null}
         </div>
       </section>
     </div>
   );
 }
 
-export function AccessScreen({
-  allowEmployeePreview = false,
-  authError,
-  signedInEmail,
-}: AccessScreenProps) {
+export function AccessScreen({ authError, signedInEmail }: AccessScreenProps) {
   const [isRedirecting, setIsRedirecting] = useState(false);
   const isSignedInWithoutAccess = Boolean(signedInEmail);
   const hasAuthError = Boolean(authError);
@@ -273,7 +245,6 @@ export function AccessScreen({
       <div className="pointer-events-none absolute inset-0 opacity-[0.14] [background-image:radial-gradient(circle,white_1px,transparent_1px)] [background-size:28px_28px]" />
 
       <MobileAccessScreen
-        allowEmployeePreview={allowEmployeePreview}
         hasAuthError={hasAuthError}
         isRedirecting={isRedirecting}
         signedInEmail={signedInEmail}
@@ -395,8 +366,6 @@ export function AccessScreen({
                   </button>
                 </>
               )}
-
-              {allowEmployeePreview ? <EmployeePreviewLink /> : null}
             </div>
           </section>
         </div>
