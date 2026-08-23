@@ -12,6 +12,8 @@ This guide describes normal actions a manager or employee performs in The Schedu
 
 An unapproved account sees an access message and no schedule data. If Google is already signed into the wrong account, sign out of the application and use a separate browser profile or private window.
 
+Phones show a compact sign-in screen with the same Google authentication. The original split landing page remains the desktop presentation.
+
 Approved users receive a rolling ten-year browser session. They normally remain signed in on the same browser unless they sign out, clear browser data, a manager deactivates their access, or a clean UAT reset removes active sessions.
 
 ## Manager navigation
@@ -45,7 +47,7 @@ Employees have these areas:
 | `Team schedule` | Published schedule for the full team |
 | `Coverage` | Open requests, offers, and swap activity |
 
-Mobile layouts show quick actions for common tasks. Employees never see manager navigation or an identity selector.
+Below 768px, employees receive a phone-specific layout with a compact account menu and fixed bottom navigation. `Team schedule` becomes a vertical day-by-day agenda instead of the desktop seven-column calendar. The data and actions are shared with desktop, but the presentation is optimized for touch. Manager tools retain the desktop layout. Employees never see manager navigation or an identity selector.
 
 ## Manager: prepare a schedule period
 
@@ -219,7 +221,7 @@ Publication sends one consolidated email per active member containing that perso
 
 1. Refresh the application after the manager publishes.
 2. Select `My shifts` and compare the listed shifts with the email.
-3. Select `Team schedule` and inspect the Sunday-start calendar.
+3. Select `Team schedule`. On desktop, inspect the Sunday-start calendar; on a phone, inspect the vertical day-by-day agenda.
 4. Confirm dates, times, names, and the employee's own shifts.
 5. On a phone, confirm the same information is readable without clipped names.
 

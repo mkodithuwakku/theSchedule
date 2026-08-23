@@ -105,7 +105,7 @@ Important UX expectations from the user:
 - Notification preview center and notification log.
 - Owner alerts for reported UAT issues, notification delivery failures, and notification API outages.
 - Publish confirmation screen before final publish.
-- Mobile employee quick actions.
+- Phone-optimized Google sign-in and an employee-only layout below 768px with a compact account header, fixed bottom navigation, touch-sized shift actions, and a vertical team agenda. Manager tools and the existing desktop employee/calendar views remain desktop layouts. The signed-out desktop landing page uses a non-personalized feature overview and explicitly says real schedule data appears only after sign-in.
 - Database-deduplicated availability reminder emails three days before release.
 - Consolidated schedule publication emails with Resend provider IDs and failure reasons in `NotificationLog`.
 
@@ -127,5 +127,5 @@ Before broader real-user UAT:
 - Replace whole-workspace autosaves with normalized Prisma route handlers/server actions and database transactions. This prevents stale manager and employee browser snapshots from overwriting each other.
 - Add browser-level authentication tests for signed-out, uninvited, inactive, employee, and manager accounts; the current unit suite covers employee state-write authorization.
 - Add manager-controlled activate/deactivate and promote/demote controls backed by `StoreMembership`, with audit logging and protection against removing the final active manager.
-- Add mobile visual QA for the calendar, availability submission, and employee dashboard.
+- Complete hosted mobile UAT for the employee dashboard, availability, team agenda, coverage, and swaps on a real phone.
 - Complete hosted invite, login, availability, schedule, coverage, and swap UAT across manager and employee devices.
