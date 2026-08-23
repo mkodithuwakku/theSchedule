@@ -2569,8 +2569,18 @@ export function TheScheduleApp({
   const tabs = mode === "manager" ? managerTabs : employeeTabs;
 
   return (
-    <main className="min-h-screen bg-paper text-ink">
-      <header className="no-print sticky top-0 z-30 border-b border-line bg-white">
+    <main className={cx("min-h-screen bg-paper text-ink", mode === "employee" && "max-md:overflow-x-hidden")}>
+      {mode === "employee" && (
+        <MobileEmployeeHeader
+          employee={activeEmployee}
+          period={period}
+          status={period.status}
+          currentTheme={currentTheme}
+          onToggleTheme={() => setThemePreference(currentTheme === "dark" ? "light" : "dark")}
+          onSignOut={() => void signOut({ callbackUrl: "/" })}
+        />
+      )}
+      <header className={cx("no-print sticky top-0 z-30 border-b border-line bg-white", mode === "employee" && "hidden md:block")}>
         <div className="mx-auto flex max-w-[1800px] flex-col gap-3 px-4 py-3 xl:px-6 2xl:px-8 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex min-w-0 items-center gap-3">
             <div className="min-w-0">
@@ -2741,7 +2751,20 @@ export function TheScheduleApp({
         )}
 
         {activeTab === "dashboard" && mode === "employee" && (
-          <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+          <>
+            <MobileEmployeeDashboard
+              employee={activeEmployee}
+              period={period}
+              inviteAccepted={activeInviteAccepted}
+              needsAvailability={activeEmployeeNeedsAvailability}
+              shifts={myShifts}
+              coverageRequests={coverage}
+              onOpenAvailability={() => setActiveTab("submit")}
+              onOpenShifts={() => setActiveTab("my-shifts")}
+              onOpenTeam={() => setActiveTab("team")}
+              onRequestCoverage={requestCoverage}
+            />
+          <div className="hidden gap-4 md:grid lg:grid-cols-[0.9fr_1.1fr]">
             <Section title={activeEmployee.name} icon={<CalendarDays size={18} />}>
               <div className="grid gap-3">
                 <div className={cx("rounded-lg border p-4", activeInviteAccepted ? "border-approve/30 bg-approve/10" : "border-warn bg-warn/10")}>
@@ -2840,6 +2863,7 @@ export function TheScheduleApp({
               <ShiftList shifts={myShifts} coverageRequests={coverage} onRequestCoverage={requestCoverage} />
             </Section>
           </div>
+          </>
         )}
 
         {activeTab === "dashboard" && mode === "manager" && (
@@ -3207,12 +3231,21 @@ export function TheScheduleApp({
         )}
 
         {activeTab === "my-shifts" && mode === "employee" && (
-          <Section title="My Shifts" icon={<Clock size={18} />}>
-            <ShiftList shifts={myShifts} coverageRequests={coverage} onRequestCoverage={requestCoverage} />
-          </Section>
+          <>
+            <MobileEmployeeShifts shifts={myShifts} coverageRequests={coverage} onRequestCoverage={requestCoverage} />
+            <Section title="My Shifts" icon={<Clock size={18} />} className="hidden md:block">
+              <ShiftList shifts={myShifts} coverageRequests={coverage} onRequestCoverage={requestCoverage} />
+            </Section>
+          </>
         )}
 
         {activeTab === "submit" && mode === "employee" && (
+          <>
+          <MobilePageHeading
+            eyebrow="Before the schedule"
+            title="Availability"
+            detail={`Tell your manager when you cannot work. Submit by ${period.availabilityDeadlineAt}.`}
+          />
           <Section title="Submit Availability" icon={<Send size={18} />}>
             <div className="grid gap-4 lg:grid-cols-[0.8fr_1.2fr]">
               <div className="grid gap-3 rounded-lg border border-line p-4">
@@ -3346,11 +3379,25 @@ export function TheScheduleApp({
               </div>
             </div>
           </Section>
+          </>
         )}
 
-        {activeTab === "team" && mode === "employee" && <ScheduleGrid people={people} calendarWeeks={calendarWeeks} availability={availability} showAssignments />}
+        {activeTab === "team" && mode === "employee" && (
+          <>
+            <MobileTeamSchedule people={people} calendarWeeks={calendarWeeks} activeEmployeeId={activeEmployee.id} period={period} />
+            <ScheduleGrid people={people} calendarWeeks={calendarWeeks} availability={availability} showAssignments className="hidden md:block" />
+          </>
+        )}
 
         {activeTab === "requests" && (
+          <>
+          {mode === "employee" && (
+            <MobilePageHeading
+              eyebrow="Schedule changes"
+              title="Coverage"
+              detail="Request coverage, offer to help, or propose a shift swap."
+            />
+          )}
           <div className="grid gap-4 lg:grid-cols-2">
             <Section title="Coverage Requests" icon={<Repeat2 size={18} />}>
               <div className="grid gap-3">
@@ -3522,6 +3569,7 @@ export function TheScheduleApp({
               </div>
             </Section>
           </div>
+          </>
         )}
 
         {activeTab === "uat-plan" && mode === "manager" && (
@@ -4328,7 +4376,7 @@ export function TheScheduleApp({
         )}
       </div>
       {mode === "employee" && (
-        <nav className="no-print fixed inset-x-0 bottom-0 z-40 border-t border-line bg-white px-2 py-2 shadow-panel md:hidden">
+        <nav className="no-print fixed inset-x-0 bottom-0 z-40 border-t border-line bg-white px-2 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-panel md:hidden">
           <div className="grid grid-cols-5 gap-1">
             {employeeTabs.map((tab) => (
               <button
@@ -4373,6 +4421,335 @@ export function TheScheduleApp({
   );
 }
 
+function MobileEmployeeHeader({
+  employee,
+  period,
+  status,
+  currentTheme,
+  onToggleTheme,
+  onSignOut
+}: {
+  employee: Employee;
+  period: SchedulePeriod;
+  status: SchedulePeriod["status"];
+  currentTheme: ThemePreference;
+  onToggleTheme: () => void;
+  onSignOut: () => void;
+}) {
+  const initials = employee.name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
+
+  return (
+    <header className="no-print sticky top-0 z-50 border-b border-line bg-white/95 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur md:hidden">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="text-base font-black tracking-[-0.02em]">The Schedule</span>
+            <Badge tone={status === "published" ? "good" : "warn"}>{status}</Badge>
+          </div>
+          <p className="mt-0.5 truncate text-xs font-semibold text-ink/55">{period.name}</p>
+        </div>
+        <details className="group relative shrink-0">
+          <summary
+            className="grid size-11 cursor-pointer list-none place-items-center rounded-full bg-mall text-sm font-black text-white shadow-sm marker:hidden"
+            aria-label="Open account menu"
+          >
+            {initials || "ME"}
+          </summary>
+          <div className="absolute right-0 top-12 z-50 w-64 overflow-hidden rounded-xl border border-line bg-white shadow-panel">
+            <div className="border-b border-line p-4">
+              <div className="truncate font-black">{employee.name}</div>
+              <div className="mt-1 truncate text-sm text-ink/60">{employee.email}</div>
+            </div>
+            <div className="grid gap-1 p-2">
+              <button
+                className="flex min-h-11 items-center gap-3 rounded-lg px-3 text-left text-sm font-bold hover:bg-paper"
+                onClick={onToggleTheme}
+                type="button"
+              >
+                {currentTheme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+                {currentTheme === "dark" ? "Use light mode" : "Use dark mode"}
+              </button>
+              <button
+                className="flex min-h-11 items-center gap-3 rounded-lg px-3 text-left text-sm font-bold text-red-600 hover:bg-red-500/10"
+                onClick={onSignOut}
+                type="button"
+              >
+                <LogOut size={18} />
+                Sign out
+              </button>
+            </div>
+          </div>
+        </details>
+      </div>
+    </header>
+  );
+}
+
+function MobilePageHeading({ eyebrow, title, detail }: { eyebrow: string; title: string; detail: string }) {
+  return (
+    <div className="md:hidden">
+      <div className="text-xs font-black uppercase tracking-[0.18em] text-mall">{eyebrow}</div>
+      <h1 className="mt-1 text-3xl font-black tracking-[-0.04em] text-ink">{title}</h1>
+      <p className="mt-2 text-sm leading-6 text-ink/60">{detail}</p>
+    </div>
+  );
+}
+
+function MobileEmployeeDashboard({
+  employee,
+  period,
+  inviteAccepted,
+  needsAvailability,
+  shifts,
+  coverageRequests,
+  onOpenAvailability,
+  onOpenShifts,
+  onOpenTeam,
+  onRequestCoverage
+}: {
+  employee: Employee;
+  period: SchedulePeriod;
+  inviteAccepted: boolean;
+  needsAvailability: boolean;
+  shifts: Shift[];
+  coverageRequests: CoverageRequest[];
+  onOpenAvailability: () => void;
+  onOpenShifts: () => void;
+  onOpenTeam: () => void;
+  onRequestCoverage: (shiftId: string) => void;
+}) {
+  const nextShift = shifts[0];
+  const firstName = employee.name.trim().split(/\s+/)[0] || employee.name;
+
+  return (
+    <div className="grid gap-4 md:hidden">
+      <section className="overflow-hidden rounded-2xl bg-mall p-5 text-white shadow-panel">
+        <div className="text-xs font-black uppercase tracking-[0.18em] text-white/65">Employee schedule</div>
+        <h1 className="mt-2 text-3xl font-black tracking-[-0.04em]">Hi, {firstName}</h1>
+        <p className="mt-1 text-sm text-white/70">Here is what is coming up for your current schedule.</p>
+        <div className="mt-5 rounded-xl bg-white/12 p-4 ring-1 ring-white/15">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-xs font-black uppercase tracking-[0.14em] text-white/65">Next shift</span>
+            {nextShift ? <span className="text-xs font-bold text-white/75">{shiftDurationHours(nextShift).toFixed(1)} hours</span> : null}
+          </div>
+          {nextShift ? (
+            <>
+              <div className="mt-2 text-xl font-black">{getDayName(nextShift.date)}</div>
+              <div className="mt-1 text-base font-semibold text-white/80">
+                {formatTime(nextShift.startTime)}-{formatTime(nextShift.endTime)}
+              </div>
+            </>
+          ) : (
+            <div className="mt-2 text-base font-bold text-white/80">No assigned shifts yet</div>
+          )}
+        </div>
+      </section>
+
+      <button
+        className={cx(
+          "flex min-h-20 items-center justify-between gap-4 rounded-2xl border p-4 text-left shadow-sm",
+          needsAvailability ? "border-warn bg-warn/10" : "border-approve/30 bg-approve/10"
+        )}
+        onClick={onOpenAvailability}
+        type="button"
+      >
+        <span className={cx("grid size-11 shrink-0 place-items-center rounded-xl", needsAvailability ? "bg-warn text-white" : "bg-approve text-white")}>
+          {needsAvailability ? <AlertTriangle size={21} /> : <Check size={21} />}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block font-black">{needsAvailability ? "Availability is due" : "Availability submitted"}</span>
+          <span className="mt-1 block text-sm text-ink/60">
+            {inviteAccepted ? `Deadline: ${period.availabilityDeadlineAt}` : "Activate your invitation first"}
+          </span>
+        </span>
+        <span className="text-xl text-ink/35" aria-hidden="true">›</span>
+      </button>
+
+      <section className="rounded-2xl border border-line bg-white p-4 shadow-panel">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="text-xs font-black uppercase tracking-[0.14em] text-ink/45">My schedule</div>
+            <h2 className="mt-1 text-xl font-black">Upcoming shifts</h2>
+          </div>
+          <button className="min-h-11 rounded-lg px-3 text-sm font-black text-mall" onClick={onOpenShifts} type="button">
+            View all
+          </button>
+        </div>
+        <div className="mt-4">
+          <MobileShiftCards shifts={shifts.slice(0, 2)} coverageRequests={coverageRequests} onRequestCoverage={onRequestCoverage} compact />
+        </div>
+      </section>
+
+      <button
+        className="flex min-h-16 items-center gap-3 rounded-2xl border border-line bg-white p-4 text-left shadow-sm"
+        onClick={onOpenTeam}
+        type="button"
+      >
+        <span className="grid size-11 place-items-center rounded-xl bg-mall/10 text-mall"><Users size={21} /></span>
+        <span className="min-w-0 flex-1">
+          <span className="block font-black">Team schedule</span>
+          <span className="mt-0.5 block text-sm text-ink/55">See who is working each day</span>
+        </span>
+        <span className="text-xl text-ink/35" aria-hidden="true">›</span>
+      </button>
+    </div>
+  );
+}
+
+function MobileEmployeeShifts({
+  shifts,
+  coverageRequests,
+  onRequestCoverage
+}: {
+  shifts: Shift[];
+  coverageRequests: CoverageRequest[];
+  onRequestCoverage: (shiftId: string) => void;
+}) {
+  const totalHours = shifts.reduce((total, shift) => total + shiftDurationHours(shift), 0);
+  return (
+    <div className="grid gap-4 md:hidden">
+      <MobilePageHeading
+        eyebrow="My schedule"
+        title="My shifts"
+        detail={`${shifts.length} shift${shifts.length === 1 ? "" : "s"} · ${totalHours.toFixed(1)} scheduled hours`}
+      />
+      <MobileShiftCards shifts={shifts} coverageRequests={coverageRequests} onRequestCoverage={onRequestCoverage} />
+    </div>
+  );
+}
+
+function MobileShiftCards({
+  shifts,
+  coverageRequests,
+  onRequestCoverage,
+  compact = false
+}: {
+  shifts: Shift[];
+  coverageRequests: CoverageRequest[];
+  onRequestCoverage: (shiftId: string) => void;
+  compact?: boolean;
+}) {
+  if (shifts.length === 0) {
+    return <div className="rounded-xl border border-dashed border-line bg-paper p-5 text-center text-sm font-semibold text-ink/55">No assigned shifts for this period.</div>;
+  }
+
+  return (
+    <div className="grid gap-3">
+      {shifts.map((shift) => {
+        const coverageRequest = coverageRequests.find((request) => request.shiftId === shift.id && request.status !== "cancelled");
+        const requestPending = coverageRequest?.status === "open" || coverageRequest?.status === "offered";
+        const requestLabel =
+          coverageRequest?.status === "open"
+            ? "Coverage requested"
+            : coverageRequest?.status === "offered"
+              ? "Offer pending"
+              : coverageRequest?.status === "approved"
+                ? "Covered"
+                : coverageRequest?.status === "rejected"
+                  ? "Rejected"
+                  : "Request coverage";
+
+        return (
+          <article key={shift.id} className="rounded-2xl border border-line bg-white p-4 shadow-sm">
+            <div className="flex items-start gap-4">
+              <div className="grid size-14 shrink-0 place-items-center rounded-xl bg-mall/10 text-center text-mall">
+                <div>
+                  <div className="text-[10px] font-black uppercase leading-none">{weekdayLong(shift.date).slice(0, 3)}</div>
+                  <div className="mt-1 text-xl font-black leading-none">{parseLocalDate(shift.date).getDate()}</div>
+                </div>
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="font-black">{getDayName(shift.date)}</div>
+                    <div className="mt-1 text-sm font-semibold text-ink/60">{formatTime(shift.startTime)}-{formatTime(shift.endTime)}</div>
+                  </div>
+                  <Badge tone={requestPending ? "warn" : "neutral"}>{shiftDurationHours(shift).toFixed(1)}h</Badge>
+                </div>
+              </div>
+            </div>
+            {!compact && (
+              <Button
+                variant={requestPending || coverageRequest?.status === "rejected" ? "ghost" : "secondary"}
+                className={cx("mt-4 min-h-11 w-full rounded-xl", requestPending && "bg-paper text-ink/55")}
+                onClick={() => onRequestCoverage(shift.id)}
+                disabled={Boolean(coverageRequest)}
+              >
+                <Mail size={17} />
+                {requestLabel}
+              </Button>
+            )}
+          </article>
+        );
+      })}
+    </div>
+  );
+}
+
+function MobileTeamSchedule({
+  people,
+  calendarWeeks,
+  activeEmployeeId,
+  period
+}: {
+  people: Employee[];
+  calendarWeeks: ReturnType<typeof buildCalendarWeeks>;
+  activeEmployeeId: string;
+  period: SchedulePeriod;
+}) {
+  const days = calendarWeeks.flat().filter((day) => day.inPeriod);
+
+  return (
+    <div className="grid gap-4 md:hidden">
+      <MobilePageHeading eyebrow={period.status === "published" ? "Published schedule" : "Team preview"} title="Team schedule" detail={period.name} />
+      <div className="grid gap-3">
+        {days.map((day) => {
+          const dayHours = storeHours.find((entry) => entry.dayOfWeek === parseLocalDate(day.date).getDay());
+          return (
+            <section key={day.date} className="overflow-hidden rounded-2xl border border-line bg-white shadow-sm">
+              <div className="flex items-center justify-between gap-3 border-b border-line bg-paper px-4 py-3">
+                <div>
+                  <div className="font-black">{getDayName(day.date)}</div>
+                  <div className="mt-0.5 text-xs font-semibold text-ink/50">
+                    {dayHours ? `${formatTime(dayHours.openTime)}-${formatTime(dayHours.closeTime)}` : "Store hours unavailable"}
+                  </div>
+                </div>
+                <Badge>{day.shifts.length} shift{day.shifts.length === 1 ? "" : "s"}</Badge>
+              </div>
+              <div className="grid gap-2 p-3">
+                {day.shifts.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-line px-3 py-4 text-center text-sm font-semibold text-ink/45">No shifts</div>
+                ) : (
+                  day.shifts.map((shift) => {
+                    const isMine = shift.employeeId === activeEmployeeId;
+                    return (
+                      <div
+                        key={shift.id}
+                        className={cx("flex items-center justify-between gap-3 rounded-xl border p-3", isMine ? "border-mall/35 bg-mall/10" : "border-line bg-white")}
+                      >
+                        <div className="min-w-0">
+                          <div className={cx("truncate font-black", isMine && "text-mall")}>{isMine ? "You" : shiftAssigneeLabel(shift, people)}</div>
+                          <div className="mt-1 text-sm font-semibold text-ink/55">{formatTime(shift.startTime)}-{formatTime(shift.endTime)}</div>
+                        </div>
+                        {isMine ? <Badge tone="good">My shift</Badge> : <span className="text-sm font-bold text-ink/45">{shiftDurationHours(shift).toFixed(1)}h</span>}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </section>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function ScheduleGrid({
   people,
   title = "Team Schedule",
@@ -4388,7 +4765,8 @@ function ScheduleGrid({
   selectedShift,
   selectedShiftId,
   onSelectShift,
-  showOnlyUnassigned = false
+  showOnlyUnassigned = false,
+  className
 }: {
   people: Employee[];
   title?: string;
@@ -4405,6 +4783,7 @@ function ScheduleGrid({
   selectedShiftId?: string | null;
   onSelectShift?: (shiftId: string) => void;
   showOnlyUnassigned?: boolean;
+  className?: string;
 }) {
   const weekDayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const activePeople = (assignablePeople ?? people).filter((employee) => employee.active);
@@ -4432,6 +4811,7 @@ function ScheduleGrid({
     <Section
       title={title}
       icon={<CalendarDays size={18} />}
+      className={className}
       captureRef={exportRef}
       action={
         action ?? (

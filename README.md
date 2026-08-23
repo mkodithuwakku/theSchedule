@@ -176,7 +176,7 @@ Implemented in the working MVP surface:
 - Managers approve or reject coverage and accepted swaps before the schedule changes.
 - Reports separate initial published hours from final worked hours and export CSV.
 - Managers can log/export UAT issues, preview notification templates, and confirm schedule publishing before notifications are queued.
-- Employees have mobile quick actions for availability, shifts, team schedule, and issue reporting.
+- Employees have a dedicated phone layout with a compact dashboard, bottom navigation, touch-sized shift actions, and a vertical day-by-day team agenda; manager tools retain the desktop layout.
 - Print/download paths are available from schedule and report surfaces.
 
 Next production hardening step: move each scheduling workflow from the shared Neon JSON workspace into its existing normalized Prisma models and transactional server actions while keeping the same business rules from `src/lib/demo-data.ts`.

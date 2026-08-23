@@ -122,7 +122,7 @@ Pass condition: the period becomes published exactly once and every active membe
 
 1. Refresh all employees.
 2. Compare `My shifts`, `Team schedule`, and the email contents.
-3. Check at least one phone-sized view.
+3. Keep the manager on desktop and open one employee profile on a phone. Check the compact header, fixed bottom navigation, personal shift cards, availability form, vertical team agenda, coverage, and swaps.
 4. Toggle theme in one employee account and prove it does not change other identities.
 
 Pass condition: each person sees the correct personal shifts and common team calendar without access or layout leaks.
