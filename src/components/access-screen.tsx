@@ -111,6 +111,109 @@ function SchedulePreview() {
   );
 }
 
+function MobileAccessScreen({
+  hasAuthError,
+  isRedirecting,
+  signedInEmail,
+  onGoogleSignIn
+}: {
+  hasAuthError: boolean;
+  isRedirecting: boolean;
+  signedInEmail?: string;
+  onGoogleSignIn: () => void;
+}) {
+  const isSignedInWithoutAccess = Boolean(signedInEmail);
+
+  return (
+    <div className="relative flex min-h-screen flex-col lg:hidden">
+      <div className="px-5 pb-8 pt-[max(1.25rem,env(safe-area-inset-top))]">
+        <div className="relative h-[58px] w-[210px] overflow-hidden" aria-label="Men Are From Mars">
+          <Image
+            alt="Men Are From Mars"
+            className="object-cover"
+            fill
+            priority
+            sizes="210px"
+            src="/men-are-from-mars-logo.png"
+          />
+        </div>
+
+        <div className="mt-10 max-w-sm">
+          <p className="text-[11px] font-extrabold tracking-[0.22em] text-[#78c4f3]">EMPLOYEE SCHEDULING</p>
+          <h1 className="mt-3 text-[2.55rem] font-black leading-[0.98] tracking-[-0.045em]">
+            Your week,
+            <br />
+            clearly scheduled.
+          </h1>
+          <p className="mt-4 max-w-xs text-sm leading-6 text-white/60">Availability, shifts, and coverage—all in one place.</p>
+        </div>
+
+        <div className="mt-8 flex gap-2" aria-hidden="true">
+          <span className="h-1.5 w-10 rounded-full bg-[#78c4f3]" />
+          <span className="h-1.5 w-4 rounded-full bg-white/20" />
+          <span className="h-1.5 w-4 rounded-full bg-white/20" />
+        </div>
+      </div>
+
+      <section className="mt-auto rounded-t-[2rem] bg-[#f4f7fb] px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-7 text-[#121824] shadow-[0_-20px_55px_rgba(0,0,0,0.24)]">
+        <div className="mx-auto w-full max-w-md">
+          <div className="h-1 w-12 rounded-full bg-[#0f62a3]" />
+          <p className="mt-5 text-xs font-extrabold tracking-[0.16em] text-[#0f62a3]">THE SCHEDULE</p>
+          <h2 className="mt-2 text-[2rem] font-black leading-tight tracking-[-0.035em]">
+            {isSignedInWithoutAccess ? "Account not approved" : "Welcome back"}
+          </h2>
+
+          {isSignedInWithoutAccess ? (
+            <>
+              <div className="mt-5 rounded-2xl border border-[#e5b981] bg-[#fff8ed] p-4 text-sm leading-6 text-[#70420d]">
+                <div className="font-black">This Google account is not an active employee.</div>
+                <p className="mt-1 break-words text-[#70420d]/80">
+                  You signed in as {signedInEmail}. Ask your manager to approve this exact email address.
+                </p>
+              </div>
+              <button
+                className="mt-5 inline-flex min-h-14 w-full items-center justify-center gap-3 rounded-xl border border-[#cdd7e2] bg-white px-5 font-extrabold text-[#172033] shadow-sm"
+                onClick={() => void signOut({ callbackUrl: "/" })}
+                type="button"
+              >
+                <LogOut size={19} />
+                Use another Google account
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="mt-3 text-sm leading-6 text-[#5f6877]">Sign in with the Google account your manager approved.</p>
+
+              {hasAuthError ? (
+                <div className="mt-5 flex gap-3 rounded-2xl border border-[#e6b4b0] bg-[#fff2f1] p-4 text-sm leading-6 text-[#7c2420]" role="alert">
+                  <AlertCircle className="mt-0.5 shrink-0" size={19} />
+                  <div>
+                    <div className="font-black">Google sign-in is temporarily unavailable.</div>
+                    <p className="mt-0.5 text-[#7c2420]/80">Please try again in a moment.</p>
+                  </div>
+                </div>
+              ) : null}
+
+              <button
+                className="group mt-6 inline-flex min-h-14 w-full items-center justify-center gap-3 rounded-xl bg-[#0f62a3] px-4 font-extrabold text-white shadow-[0_12px_30px_rgba(15,98,163,0.24)] disabled:cursor-wait disabled:opacity-70"
+                disabled={isRedirecting}
+                onClick={onGoogleSignIn}
+                type="button"
+              >
+                <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-white">
+                  <GoogleMark />
+                </span>
+                <span>{isRedirecting ? "Opening Google…" : "Continue with Google"}</span>
+                <ArrowRight className="ml-auto" size={19} />
+              </button>
+            </>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 export function AccessScreen({ authError, signedInEmail }: AccessScreenProps) {
   const [isRedirecting, setIsRedirecting] = useState(false);
   const isSignedInWithoutAccess = Boolean(signedInEmail);
@@ -126,6 +229,14 @@ export function AccessScreen({ authError, signedInEmail }: AccessScreenProps) {
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_15%,rgba(28,118,188,0.34),transparent_34%),radial-gradient(circle_at_74%_90%,rgba(51,91,151,0.2),transparent_28%)]" />
       <div className="pointer-events-none absolute inset-0 opacity-[0.14] [background-image:radial-gradient(circle,white_1px,transparent_1px)] [background-size:28px_28px]" />
 
+      <MobileAccessScreen
+        hasAuthError={hasAuthError}
+        isRedirecting={isRedirecting}
+        signedInEmail={signedInEmail}
+        onGoogleSignIn={startGoogleSignIn}
+      />
+
+      <div className="hidden lg:block">
       <div className="relative mx-auto grid min-h-screen max-w-[1500px] lg:grid-cols-[1.12fr_0.88fr]">
         <section className="flex flex-col justify-between px-6 pb-10 pt-7 sm:px-10 lg:px-16 lg:py-12 xl:px-24">
           <div
@@ -240,6 +351,7 @@ export function AccessScreen({ authError, signedInEmail }: AccessScreenProps) {
             )}
           </div>
         </section>
+      </div>
       </div>
     </main>
   );
