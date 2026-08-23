@@ -80,6 +80,8 @@ The employee's signed-in Google email is their identity. Avoid changing it unles
 
 The link expires after 14 days and may only be accepted once. The employee must choose the same Google email that received the invitation.
 
+After a clean production UAT reset, use this flow to invite `m.kodithuwakku.hockey@gmail.com` and `bobby.cazby@gmail.com`. The manager and `kodithuw@ualberta.ca` remain the two initially active accounts.
+
 ### Accept an invitation as the employee
 
 1. Open the invitation email in a private window or the employee's own browser profile.

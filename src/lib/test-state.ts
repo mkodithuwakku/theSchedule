@@ -16,6 +16,13 @@ import { normalizeUatChecklistProgress } from "@/lib/uat-checklist";
 const DATA_DIR = path.join(process.cwd(), "data");
 const TEST_STATE_FILE = path.join(DATA_DIR, "test-state.json");
 
+export const CLEAN_RUN_ACTIVE_EMAILS = [
+  "m.kodithuwakku803@gmail.com",
+  "kodithuw@ualberta.ca"
+] as const;
+
+const cleanRunActiveEmailSet = new Set<string>(CLEAN_RUN_ACTIVE_EMAILS);
+
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
@@ -97,6 +104,9 @@ export function createCleanRunTestState(uatRunId: string, now = new Date()): Sto
   const state = createDefaultTestState(uatRunId);
   return {
     ...state,
+    // Keep two known identities active and leave the other two out of the
+    // directory so the manager can exercise the real invitation flow.
+    people: state.people.filter((person) => cleanRunActiveEmailSet.has(person.email.toLowerCase())),
     period,
     shifts: generateDefaultShifts(period),
     dayProgression: {

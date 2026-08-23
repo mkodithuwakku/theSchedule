@@ -6,7 +6,7 @@ import {
   normalizeUatChecklistProgress
 } from "@/lib/uat-checklist";
 import { GUIDED_UAT_ACCOUNTS, GUIDED_UAT_PHASES, GUIDED_UAT_STEPS } from "@/lib/guided-uat";
-import { createCleanRunTestState, createDefaultTestState, normalizeTestState } from "@/lib/test-state";
+import { CLEAN_RUN_ACTIVE_EMAILS, createCleanRunTestState, createDefaultTestState, normalizeTestState } from "@/lib/test-state";
 import { CLEAN_RUN_CONFIRMATION, isCleanRunConfirmation } from "@/lib/uat-reset-shared";
 
 test("production UAT checklist is extensive and has unique stable IDs", () => {
@@ -81,4 +81,12 @@ test("a clean production run opens a future Edmonton schedule window", () => {
   assert.equal(cleanRun.period.endDate, "2026-09-10");
   assert(cleanRun.shifts.length > 0);
   assert(cleanRun.shifts.every((shift) => shift.schedulePeriodId === cleanRun.period.id));
+});
+
+test("a clean production run leaves two accounts for real email invitations", () => {
+  const cleanRun = createCleanRunTestState("uat_invite_run", new Date("2026-08-17T18:00:00.000Z"));
+
+  assert.deepEqual(cleanRun.people.map((person) => person.email), [...CLEAN_RUN_ACTIVE_EMAILS]);
+  assert.equal(cleanRun.people.some((person) => person.email === "m.kodithuwakku.hockey@gmail.com"), false);
+  assert.equal(cleanRun.people.some((person) => person.email === "bobby.cazby@gmail.com"), false);
 });

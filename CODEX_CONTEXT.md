@@ -10,7 +10,7 @@ The current product goal is hosted, authenticated UAT with Google identities and
 
 - Employees can accept a mocked Gmail invite, submit unavailable days, submit no unavailable days, view shifts, request coverage, offer coverage, and request swaps.
 - Managers can invite employees by Gmail, track availability, generate and assign schedules, review publish warnings, publish schedules, approve coverage/swaps, preview notifications, export reports, and log UAT issues.
-- The active test accounts are `m.kodithuwakku803@gmail.com` as manager/floor staff, plus `kodithuw@ualberta.ca`, `m.kodithuwakku.hockey@gmail.com`, and `bobby.cazby@gmail.com` as employees.
+- The test accounts are `m.kodithuwakku803@gmail.com` as manager/floor staff, plus `kodithuw@ualberta.ca`, `m.kodithuwakku.hockey@gmail.com`, and `bobby.cazby@gmail.com` as employees. A clean production UAT reset starts only the manager and UAlberta employee active; Hockey and Bobby must be invited through the live email flow.
 - The app has light/dark mode saved per test identity and a Men Are From Mars visual theme.
 - Reported UAT issues and software-impacting notification failures should alert the owner email, currently `m.kodithuwakku803@gmail.com`.
 - The future multi-store direction is documented, but the active test build is intentionally single-store.
@@ -24,7 +24,7 @@ The current product goal is hosted, authenticated UAT with Google identities and
 - `src/lib/guided-uat.ts` defines the ordered, click-by-click normal schedule journey shown first in Test Plan, including progression into the next schedule.
 - `src/lib/uat-checklist.ts` defines the 117-flow advanced production UAT plan and validates persisted manual results; guided steps reuse matching advanced IDs.
 - `src/lib/schedule-progression.ts` creates consecutive schedule periods, advances the shared manager-controlled UAT date, and keeps bounded six-period publication history.
-- `src/lib/uat-reset.ts` performs the manager-only clean-run reset, restores seeded identities, clears OAuth/session and UAT artifacts, and creates a new run identifier.
+- `src/lib/uat-reset.ts` performs the manager-only clean-run reset, clears OAuth/session and UAT artifacts, starts two identities active, leaves Hockey/Bobby awaiting fresh invitations, and creates a new run identifier.
 - `src/lib/auth.ts` configures Google/Auth.js and permits verified Google identities to link to pre-seeded or invited user records on first login.
 - `src/lib/access.ts` resolves the signed-in Google account to an active Neon store membership.
 - `src/lib/workspace-state.ts` persists and role-filters the shared schedule workspace in Neon.
@@ -64,7 +64,7 @@ Starting the development server does not reset Neon. Use the manager-only `Test 
 
 The app should start before schedule release so the manager can test the whole cycle:
 
-1. Employee accepts the mocked invite.
+1. Manager sends live invitations to Hockey and Bobby; each employee accepts from email with the matching Google account.
 2. Employee submits unavailable days, or submits no unavailable days.
 3. Manager checks availability status and missing-submission highlights.
 4. Manager generates a draft schedule.
@@ -100,7 +100,7 @@ Important UX expectations from the user:
 - Manager-only day progression can archive a published period, open the next draft, advance or jump to the reminder date, run real deduplicated reminder delivery, and repeat after the next publication.
 - One bounded Neon schedule backup per store, overwritten daily or on demand, automatically refreshed before destructive resets, and restorable by an active manager.
 - Every successful workspace save refreshes the same backup row; the cron covers idle days, while same-day manual and `pre_reset` snapshots are preserved from automatic save overwrites.
-- Manager-only clean-run reset for first-login retesting, guarded by typed confirmation and stale-run write rejection.
+- Manager-only clean-run reset for first-login retesting, guarded by typed confirmation and stale-run write rejection. It intentionally leaves Hockey and Bobby inactive and outside the workspace directory so their Resend invitation emails and Google acceptance can be tested.
 - UAT issue tracker and exports.
 - Notification preview center and notification log.
 - Owner alerts for reported UAT issues, notification delivery failures, and notification API outages.

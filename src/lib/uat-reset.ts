@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Prisma, ScheduleStatus, UserRole } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { createCleanRunTestState } from "@/lib/test-state";
+import { CLEAN_RUN_ACTIVE_EMAILS, createCleanRunTestState } from "@/lib/test-state";
 import { overwriteWorkspaceBackupWithClient } from "@/lib/workspace-backup";
 export { CLEAN_RUN_CONFIRMATION, isCleanRunConfirmation } from "@/lib/uat-reset-shared";
 
@@ -11,6 +11,8 @@ export const CANONICAL_UAT_USERS = [
   { name: "M. Kodithuwakku Hockey", email: "m.kodithuwakku.hockey@gmail.com", role: UserRole.employee },
   { name: "Bobby Cazby", email: "bobby.cazby@gmail.com", role: UserRole.employee }
 ] as const;
+
+const cleanRunActiveEmailSet = new Set<string>(CLEAN_RUN_ACTIVE_EMAILS);
 
 function jsonValue(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
@@ -82,10 +84,11 @@ export async function resetProductionUat(storeId: string) {
         select: { id: true, role: true }
       });
       canonicalUsers.push(user);
+      const startsActive = cleanRunActiveEmailSet.has(fixture.email);
       await transaction.storeMembership.upsert({
         where: { storeId_userId: { storeId, userId: user.id } },
-        update: { role: fixture.role, active: true },
-        create: { storeId, userId: user.id, role: fixture.role, active: true }
+        update: { role: fixture.role, active: startsActive },
+        create: { storeId, userId: user.id, role: fixture.role, active: startsActive }
       });
     }
 
@@ -128,6 +131,8 @@ export async function resetProductionUat(storeId: string) {
     return {
       resetAt: resetAt.toISOString(),
       restoredUsers: canonicalUsers.length,
+      activeUsers: CLEAN_RUN_ACTIVE_EMAILS.length,
+      awaitingInvitationUsers: CANONICAL_UAT_USERS.length - CLEAN_RUN_ACTIVE_EMAILS.length,
       removedAccounts: removedAccounts.count,
       removedSessions: removedSessions.count,
       removedInvitations: removedInvitations.count,

@@ -99,7 +99,7 @@ Changing a person's access is a database operation on `StoreMembership.role` and
 
 ## Production Verification
 
-Use the manager `Test Plan` tab as the source of truth. Start with `Guided Full Schedule Run`, which gives the exact account, clicks, and pass condition for the ordinary end-to-end schedule cycle: sign-in, setup, availability, generation, editing, publication, employee review, coverage, swaps, reports, issue tracking, and backup. Use four separate browser profiles for the seeded manager and three seeded employees. Guided results persist through Neon and also mark their matching advanced tests.
+Use the manager `Test Plan` tab as the source of truth. Start with `Guided Full Schedule Run`, which gives the exact account, clicks, and pass condition for the ordinary end-to-end schedule cycle: sign-in, invitation, availability, generation, editing, publication, employee review, coverage, swaps, reports, issue tracking, and backup. Use four separate browser profiles. The manager and UAlberta employee start active; Hockey and Bobby become active only after accepting the manager's live email invitations. Guided results persist through Neon and also mark their matching advanced tests.
 
 After the guided run, use the 117-test advanced checklist for signed-out/unauthorized paths, invite token edge cases, input validation, publish retries, approval/rejection alternatives, exports, concurrency, daily/manual backup and restore, recurring schedule cycles, provider failures, and reset verification. Results can be exported to CSV or JSON.
 
@@ -136,8 +136,8 @@ Only an active manager can perform the full reset:
 3. Type `RESET CLEAN RUN` exactly.
 4. Confirm the browser warning.
 5. The reset clears workspace/checklist state, invitations, normalized schedules, notification deduplication and logs, audit logs, Auth.js Google account links, and active sessions.
-6. The store configuration plus the four seeded users and memberships are restored. A new date-relative period opens availability immediately, closes it after five Edmonton calendar days, releases after seven days, and starts the schedule the following day.
-7. Every browser is signed out. Sign in again to test first-login Google linking.
+6. The store configuration and four test identities remain, but only the manager and UAlberta memberships start active. Hockey and Bobby are removed from the directory and must be invited again. A new date-relative period opens availability immediately, closes it after five Edmonton calendar days, releases after seven days, and starts the schedule the following day.
+7. Every browser is signed out. Sign in as the manager and UAlberta employee, then invite and accept Hockey and Bobby before continuing.
 
 The reset is protected by server-side manager authorization and an exact confirmation phrase. Each run has a unique identifier, so an old tab from a previous run receives a conflict instead of restoring stale data.
 

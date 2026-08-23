@@ -77,16 +77,15 @@ export const GUIDED_UAT_PHASES: GuidedUatPhase[] = [
       },
       {
         id: "auth-employee-first-login",
-        title: "Sign in all three employees in separate browser profiles",
-        actor: "Employees A, B, and C",
+        title: "Sign in the initially active employee",
+        actor: "Employee A",
+        account: "kodithuw@ualberta.ca",
         instructions: [
-          "Open three separate private windows or browser profiles so Google sessions do not replace each other.",
-          "In the first, sign in as Employee A: kodithuw@ualberta.ca.",
-          "In the second, sign in as Employee B: m.kodithuwakku.hockey@gmail.com.",
-          "In the third, sign in as Employee C: bobby.cazby@gmail.com.",
-          "Confirm each browser shows that employee's own name and Employee Dashboard."
+          "Open a separate private window or browser profile so Google does not replace the manager session.",
+          "Sign in as Employee A: kodithuw@ualberta.ca.",
+          "Confirm the browser shows Employee A's own name and Employee Dashboard."
         ],
-        expected: "Every seeded employee signs in successfully and each browser is bound to the correct identity."
+        expected: "Employee A signs in successfully while the two accounts awaiting invitation remain unable to access the schedule."
       },
       {
         id: "employee-identity-binding",
@@ -125,7 +124,7 @@ export const GUIDED_UAT_PHASES: GuidedUatPhase[] = [
         actor: "Manager",
         instructions: [
           "Select Employees.",
-          "Choose Edit on one seeded employee.",
+          "Choose Edit on Employee A.",
           "Make a harmless name change, select Save, and confirm it appears in the directory.",
           "Edit the employee again and restore the original name."
         ],
@@ -134,17 +133,29 @@ export const GUIDED_UAT_PHASES: GuidedUatPhase[] = [
       },
       {
         id: "invite-valid",
-        title: "Invite a new employee",
+        title: "Invite Employees B and C",
         actor: "Manager",
         instructions: [
-          "On Employees, enter a first name, last name, and a spare Google email that is not already listed.",
-          "Select Invite.",
-          "Confirm the new person appears as invited and the invite notification is logged.",
-          "If you do not have a spare Google account, mark this step Blocked and continue the rest of the run."
+          "On Employees, invite M. Kodithuwakku Hockey using m.kodithuwakku.hockey@gmail.com.",
+          "Invite Bobby Cazby using bobby.cazby@gmail.com.",
+          "Confirm both people appear as invited and both invitation notifications show Sent.",
+          "Open both inboxes and confirm each received its own invitation email."
         ],
-        expected: "A valid new Google email creates one invited employee record and one invitation attempt.",
-        target: { mode: "manager", tab: "employees", label: "Open Employees" },
-        optional: true
+        expected: "Two valid Google emails create two pending employees, two invitations, and two delivered invitation emails.",
+        target: { mode: "manager", tab: "employees", label: "Open Employees" }
+      },
+      {
+        id: "invite-signed-out-link",
+        title: "Accept both emailed invitations",
+        actor: "Employees B and C",
+        instructions: [
+          "Open Employee B's newest invitation email in Employee B's own browser profile and select Accept invitation.",
+          "Choose m.kodithuwakku.hockey@gmail.com at Google sign-in and confirm the Employee Dashboard opens.",
+          "Repeat from Employee C's inbox and browser profile using bobby.cazby@gmail.com.",
+          "Refresh the manager's Employees page and confirm both accounts now show Active."
+        ],
+        expected: "Each emailed link preserves its callback, activates only its matching account, and grants employee access.",
+        target: { mode: "manager", tab: "employees", label: "Review Employees" }
       },
       {
         id: "release-email-provider",
@@ -245,10 +256,10 @@ export const GUIDED_UAT_PHASES: GuidedUatPhase[] = [
         actor: "Manager",
         instructions: [
           "Return to Manager tools and select Availability.",
-          "Check all four seeded staff cards.",
+          "Check all four active staff cards after both invitations are accepted.",
           "Confirm Employee A, Employee B, Employee C, and the manager show Submitted, with the appropriate unavailable or fully-available summary."
         ],
-        expected: "The tracker accurately shows four completed submissions and no seeded staff member missing.",
+        expected: "The tracker accurately shows four completed submissions and no active staff member missing.",
         target: { mode: "manager", tab: "availability", label: "Open Availability Tracker" }
       }
     ]

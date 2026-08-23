@@ -977,10 +977,14 @@ export const UAT_CHECKLIST_GROUPS: UatChecklistGroup[] = [
       },
       {
         id: "reset-first-logins",
-        title: "Reset restores first-login behavior for all seeded accounts",
+        title: "Reset restores first-login and invitation behavior",
         actor: "Manager + employee",
-        steps: ["After reset, sign in once with each of the four seeded Google accounts."],
-        expected: "Each identity links once to its preserved seeded user/membership and opens the correct role without duplicate users.",
+        steps: [
+          "After reset, sign in as the manager and UAlberta employee.",
+          "Confirm Hockey and Bobby are denied before invitation.",
+          "Invite both from Employees, accept both emailed links with the matching Google accounts, and sign in."
+        ],
+        expected: "Initially active accounts link successfully, uninvited accounts are blocked, and both freshly invited accounts activate without duplicate users.",
         critical: true,
         cleanRunRecommended: true
       },

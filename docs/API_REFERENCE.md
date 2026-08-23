@@ -158,7 +158,7 @@ Request:
 }
 ```
 
-This manager-only action backs up the workspace, clears UAT and normalized scheduling artifacts, removes Auth.js accounts and sessions, restores the seeded store and four approved memberships, and creates a current date-relative period with a new run ID. Every open browser must sign in again.
+This manager-only action backs up the workspace, clears UAT and normalized scheduling artifacts, removes Auth.js accounts and sessions, and creates a current date-relative period with a new run ID. The manager and UAlberta employee memberships start active. Hockey and Bobby start inactive and absent from the employee directory so the manager can test real invitation email delivery and acceptance. Every open browser must sign in again.
 
 ## Scheduled rollout
 

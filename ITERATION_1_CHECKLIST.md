@@ -88,7 +88,7 @@ Confirmed email/auth model: the app will use Google OAuth for identity and Resen
 - [ ] `npm run build`
 - [ ] Local app still opens after build/dev restart.
 - [ ] Fresh pre-release scenario works.
-- [ ] Employee can accept mocked invite.
+- [ ] Employee can accept the live emailed invite with the matching Google account.
 - [ ] Employee can submit unavailable days.
 - [ ] Employee can submit no unavailable days.
 - [ ] Manager sees missing availability prompts.

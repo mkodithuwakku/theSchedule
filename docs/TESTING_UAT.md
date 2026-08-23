@@ -42,6 +42,8 @@ Before starting:
 4. Keep the manager window available for checking `Saved`, `Notifications`, and `UAT Issues`.
 5. Record the test date, deployed commit, browser/device, and tester name in your external notes or exported result file.
 
+After a clean production reset, only the manager and Employee A are active. Employees B and C intentionally start outside the directory with inactive memberships. Invite both from the Employees screen, confirm both emails arrive, and accept each link with the matching Google account before testing their employee actions.
+
 ## How to use the in-app checklist
 
 1. Sign in as the manager.
@@ -58,7 +60,7 @@ Before starting:
 8. After the normal journey passes, continue through the `Advanced Production UAT` groups.
 9. Export results as CSV or JSON at the end of the session.
 
-The guided run contains 48 normal-business steps. The advanced catalog contains 117 tests covering release configuration, authentication, invitations, employee experience, availability, builder behavior, publication, requests, reports, persistence, backups, recurring cycles, authorization failures, provider failure behavior, and reset behavior.
+The guided run contains 49 normal-business steps. The advanced catalog contains 117 tests covering release configuration, authentication, invitations, employee experience, availability, builder behavior, publication, requests, reports, persistence, backups, recurring cycles, authorization failures, provider failure behavior, and reset behavior.
 
 ## Guided normal production journey
 
@@ -68,19 +70,21 @@ Follow these phases in order. The in-app cards contain the most specific click t
 
 1. Sign in as manager from the production URL.
 2. Wait for `Saved`, refresh, and prove the Neon workspace returns.
-3. Sign in all three employees in separate profiles.
-4. Confirm each employee sees their own name and no manager tools.
+3. Sign in Employee A in a separate profile.
+4. Confirm Employee A sees their own name and no manager tools.
 
-Pass condition: all approved first logins work without `OAuthAccountNotLinked` or `AccessDenied`, and identities cannot be switched.
+Pass condition: the two initially active identities sign in without `OAuthAccountNotLinked` or `AccessDenied`, and Employee A cannot switch identities.
 
 ### Phase 2: manager setup and email
 
 1. Review period/deadline/release settings.
-2. Make and revert one harmless employee-name edit.
-3. Invite a spare Google account if one is available; otherwise mark only that optional step blocked.
-4. Send a test email from `Settings` and confirm the inbox and log.
+2. Make and revert one harmless Employee A name edit.
+3. Invite Employee B (`m.kodithuwakku.hockey@gmail.com`) and Employee C (`bobby.cazby@gmail.com`).
+4. Confirm both invitation emails arrive, then accept each link in that employee's browser profile with the matching Google account.
+5. Confirm both employees reach their own dashboards without manager tools.
+6. Send a test email from `Settings` and confirm the inbox and log.
 
-Pass condition: settings and directory changes persist, and the production email path records and delivers one message.
+Pass condition: settings and directory changes persist, both real invitations are delivered and accepted, and the production email path records successful sends.
 
 ### Phase 3: collect availability
 
@@ -243,7 +247,7 @@ Before reset:
 1. Export UAT results and issues.
 2. Record any evidence still needed for failures.
 3. Stop all employee editing.
-4. Confirm you can sign back into the four seeded accounts.
+4. Confirm you can sign back into the manager and Employee A accounts and can access the Employee B/C inboxes for fresh invitations.
 
 Reset:
 
@@ -253,10 +257,12 @@ Reset:
 4. Confirm the browser warning.
 5. Wait for the reset response and sign-out.
 6. Refresh all employee windows and confirm they are also signed out.
-7. Sign in again as manager and then each employee.
-8. Confirm first-login linking works and no old checklist, schedule, request, invitation, session, or notification state returns.
-9. Confirm the four seeded people and a date-relative availability period exist.
-10. Try refreshing an old pre-reset tab; it must not restore stale data.
+7. Sign in again as manager and Employee A.
+8. Confirm Hockey and Bobby cannot access the schedule before invitation.
+9. Invite Hockey and Bobby, accept both emailed links with their matching Google accounts, and confirm both become active.
+10. Confirm first-login linking works and no old checklist, schedule, request, invitation, session, or notification state returns.
+11. Confirm four active people and a date-relative availability period exist after acceptance.
+12. Try refreshing an old pre-reset tab; it must not restore stale data.
 
 The reset preserves store configuration and recreates the seeded access baseline. It clears workspace/checklist data, invitations, normalized schedule data, notification claims/logs, audit data, OAuth accounts, and sessions. A protected `pre_reset` backup is made first, but do not use reset as a routine way to start a new schedule cycle.
 

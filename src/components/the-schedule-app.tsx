@@ -606,6 +606,7 @@ export function TheScheduleApp({
   const [hasLoadedStoredState, setHasLoadedStoredState] = useState(false);
   const [persistenceStatus, setPersistenceStatus] = useState<PersistenceStatus>("loading");
   const [testEmailStatus, setTestEmailStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [testEmailMessage, setTestEmailMessage] = useState("");
   const [selectedShiftId, setSelectedShiftId] = useState<string | null>(null);
   const [showOnlyUnassigned, setShowOnlyUnassigned] = useState(false);
   const [showIssueReporter, setShowIssueReporter] = useState(false);
@@ -1332,6 +1333,7 @@ export function TheScheduleApp({
     if (!userId) return;
 
     setTestEmailStatus("sending");
+    setTestEmailMessage("");
     try {
       const response = await fetch("/api/notifications/test-email", {
         method: "POST",
@@ -1343,12 +1345,20 @@ export function TheScheduleApp({
       });
       if (!response.ok) throw new Error("Unable to send test notification.");
 
-      const result = (await response.json()) as { notification: NotificationEntry };
+      const result = (await response.json()) as {
+        notification: NotificationEntry;
+        provider?: { status: NotificationEntry["status"]; reason?: string | null };
+      };
       setNotifications((current) => [result.notification, ...current.filter((entry) => entry.id !== result.notification.id)]);
       addAudit("test_email_sent", "NotificationLog", result.notification.id, `Test email ${result.notification.status} for ${nameFor(userId)}.`);
+      if (result.provider?.status !== "sent") {
+        throw new Error(result.provider?.reason || "The email provider did not confirm delivery.");
+      }
       setTestEmailStatus("sent");
-    } catch {
+      setTestEmailMessage("Email sent. Check the recipient inbox.");
+    } catch (error) {
       setTestEmailStatus("error");
+      setTestEmailMessage(error instanceof Error ? error.message : "Notification failed.");
       sendOwnerAlert("software_outage", "Test notification failed", [
         { label: "Recipient", value: userId ? nameFor(userId) : "Unknown recipient" },
         { label: "Schedule period", value: period.name },
@@ -2321,7 +2331,7 @@ export function TheScheduleApp({
   async function resetProductionUatRun() {
     if (!isManager || cleanResetConfirmation !== CLEAN_RUN_CONFIRMATION) return;
     const confirmed = window.confirm(
-      "This will erase the production UAT run, all invitation/notification history, and every test account's Google link and session. Continue?"
+      "This will erase the production UAT run, all invitation/notification history, and every test account's Google link and session. Hockey and Bobby will require new email invitations. Continue?"
     );
     if (!confirmed) return;
 
@@ -3552,7 +3562,8 @@ export function TheScheduleApp({
                         <div className="font-black">Need first-time logins and an empty run?</div>
                         <p className="mt-1 text-sm leading-6 text-ink/70">
                           Use Clean production UAT run below before marking Step 1. It backs up the schedule first, clears all test
-                          progress and sessions, and restores these four seeded identities. Do not reset in the middle of this guide.
+                          progress and sessions. Manager and Employee A start active; Employees B and C must accept fresh email
+                          invitations. Do not reset in the middle of this guide.
                         </p>
                       </div>
                     </div>
@@ -3902,8 +3913,8 @@ export function TheScheduleApp({
                       <div className="font-black">This is a destructive production reset.</div>
                       <p className="mt-2 text-sm leading-6 text-ink/70">
                         It clears the workspace, checklist, invitations, normalized schedule data, notification deduplication,
-                        audit logs, Google account links, and active sessions. The store, configuration, and four seeded test
-                        identities/memberships are restored so every account can exercise first login again.
+                        audit logs, Google account links, and active sessions. The manager and UAlberta employee start active.
+                        Hockey and Bobby are removed from the directory so you can invite them through the real email flow.
                       </p>
                     </div>
                   </div>
@@ -4243,7 +4254,7 @@ export function TheScheduleApp({
               <div className="grid gap-3">
                 <div className="rounded-lg border border-line p-3">
                   <div className="text-xs font-semibold uppercase tracking-normal text-ink/55">Approved access</div>
-                  <div className="mt-2 font-black">{people.filter((person) => person.active).length} active Gmail accounts</div>
+                  <div className="mt-2 font-black">{people.filter((person) => inviteStatusFor(person) === "active").length} active Gmail accounts</div>
                   <div className="mt-3 rounded-md bg-paper p-3 text-sm">
                     <div className="font-bold">Signed in as {currentUser.email}</div>
                     <div className="mt-1 capitalize text-ink/60">{currentUser.role} access</div>
@@ -4256,8 +4267,8 @@ export function TheScheduleApp({
                     <Mail size={16} />
                     {testEmailStatus === "sending" ? "Sending" : "Send test email"}
                   </Button>
-                  {testEmailStatus === "sent" && <div className="mt-2 text-sm font-semibold text-approve">Notification logged.</div>}
-                  {testEmailStatus === "error" && <div className="mt-2 text-sm font-semibold text-red-700">Notification failed.</div>}
+                  {testEmailStatus === "sent" && <div className="mt-2 text-sm font-semibold text-approve">{testEmailMessage}</div>}
+                  {testEmailStatus === "error" && <div className="mt-2 text-sm font-semibold text-red-700">{testEmailMessage || "Notification failed."}</div>}
                 </div>
               </div>
             </Section>

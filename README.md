@@ -22,10 +22,10 @@ The app is based on the uploaded Store Scheduler SRS and includes:
 - Employee dashboard, availability submission, my shifts, full team schedule, coverage offers, and swap requests
 - Guided click-by-click full schedule run plus 117 advanced production flows, with saved results, search/filtering, and CSV/JSON export
 - Manager-controlled day progression that archives a published schedule, opens the next period, advances a shared simulated date, and triggers real reminder/publication email paths
-- Manager-only clean-run reset that restores seeded identities while clearing UAT data, OAuth links, sessions, and notification deduplication
+- Manager-only clean-run reset that clears UAT data, OAuth links, sessions, and notification deduplication while leaving two accounts for fresh email invitation testing
 - Development-only scenario presets for quickly loading common workflow states
 - UAT issue tracker with status toggles and CSV/JSON export
-- Employee invite acceptance mock for testing the Gmail join flow before production auth is enabled
+- Live employee invitation emails with Google-account-matched acceptance
 - Manager notification preview center for invite, availability, publishing, coverage, swap, and approval emails
 - Availability conflict checks using full-day, shift-template, and custom-time overlap rules
 - Initial published hours versus final worked hours reporting
@@ -80,14 +80,14 @@ The workspace persists through Neon. Browser storage remains only a temporary re
 Schedule views render as Sunday-start calendar weeks.
 In the manager builder, click a shift to open the assignment panel, use `Unassigned` to filter unassigned shifts, and `Publish` warns before publishing with unassigned shifts.
 Coverage requests and shift swaps are included in the saved test state, so they survive refreshes and can be tested across manager/employee role switches.
-The manager `Test Plan` tab starts with a guided full schedule run. It walks the manager through the normal business journey in order: four-account sign-in, store and employee setup, every normal availability style, draft generation and editing, publish review, employee schedule review, coverage, swaps, reports, issue handling, backup, and sign-out. Each step includes the exact account, clicks, expected result, and a saved Not run/Passed/Failed/Blocked result. The same result also updates the matching advanced test.
+The manager `Test Plan` tab starts with a guided full schedule run. It walks the manager through the normal business journey in order: initial manager/employee sign-in, live invitations for two more employees, every normal availability style, draft generation and editing, publish review, employee schedule review, coverage, swaps, reports, issue handling, backup, and sign-out. Each step includes the exact account, clicks, expected result, and a saved Not run/Passed/Failed/Blocked result. The same result also updates the matching advanced test.
 
 Below the guided run are 117 advanced production flows across release configuration, authentication, invitations, availability, schedule building, publishing, coverage, swaps, reports, persistence, backups, recurring schedule cycles, authorization failures, and reset behavior. Use these after the normal journey for edge cases and failure paths; results persist in Neon and can be exported as CSV or JSON.
 
 After publishing the first schedule, open `Test Plan` → `Day Progression & Next Schedule Test`. `Start next schedule cycle` refreshes the protected backup, moves the published period into bounded six-cycle history, and opens a new draft. Use `Advance 1 day` to walk through the period or `Jump to reminder email day` to execute the same deduplicated reminder delivery used by the daily Vercel job. Collect availability and publish normally to verify the next consolidated schedule emails, then select `Start following cycle` to repeat.
-When a new end-to-end run must begin from first login, use `Test Plan` → `Clean production UAT run`. Type `RESET CLEAN RUN` and confirm. This deliberately signs out every store test account, removes their Google account links, clears UAT workspace/normalized schedule/invite/notification/audit data, and restores the four seeded users and memberships. The clean period is dated from the current Edmonton day so availability is open for five days, release is seven days away, and the schedule begins the following day. A per-run identifier prevents an old browser tab from writing stale state back after the reset.
+When a new end-to-end run must begin from first login, use `Test Plan` → `Clean production UAT run`. Type `RESET CLEAN RUN` and confirm. This deliberately signs out every store test account, removes their Google account links, and clears UAT workspace/normalized schedule/invite/notification/audit data. The manager and UAlberta employee start active; Hockey and Bobby start inactive and outside the directory so their real invitation emails and acceptance can be tested. The clean period is dated from the current Edmonton day so availability is open for five days, release is seven days away, and the schedule begins the following day. A per-run identifier prevents an old browser tab from writing stale state back after the reset.
 Use `Report issue` from the test-mode banner or employee mobile dashboard to log UAT notes while testing. Managers can review, resolve, reopen, and export those notes from the `UAT Issues` tab.
-Employees can accept a mocked invite from their dashboard, which records the join flow without requiring live Google sign-in yet.
+Employees accept production invitation links from email using the exact invited Google account.
 Managers can use the `Notifications` tab to preview the Gmail copy for each major workflow and review queued/sent/failed notification logs.
 Publishing now opens a confirmation review with warnings, employee notification counts, and an hours snapshot before the schedule is actually submitted.
 
