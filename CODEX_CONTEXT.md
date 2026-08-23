@@ -105,7 +105,7 @@ Important UX expectations from the user:
 - Notification preview center and notification log.
 - Owner alerts for reported UAT issues, notification delivery failures, and notification API outages.
 - Publish confirmation screen before final publish.
-- Phone-optimized Google sign-in and an employee-only layout below 768px with a compact account header, fixed bottom navigation, touch-sized shift actions, and a vertical team agenda. Manager tools and the existing desktop employee/calendar views remain desktop layouts.
+- Phone-optimized Google sign-in and an employee-only layout below 768px with a compact account header, fixed bottom navigation, touch-sized shift actions, and a vertical team agenda. Manager tools and the existing desktop employee/calendar views remain desktop layouts. The signed-out desktop landing page uses a non-personalized feature overview and explicitly says real schedule data appears only after sign-in.
 - Database-deduplicated availability reminder emails three days before release.
 - Consolidated schedule publication emails with Resend provider IDs and failure reasons in `NotificationLog`.
 
