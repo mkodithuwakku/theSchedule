@@ -128,4 +128,5 @@ Before broader real-user UAT:
 - Add browser-level authentication tests for signed-out, uninvited, inactive, employee, and manager accounts; the current unit suite covers employee state-write authorization.
 - Add manager-controlled activate/deactivate and promote/demote controls backed by `StoreMembership`, with audit logging and protection against removing the final active manager.
 - Complete hosted mobile UAT for the employee dashboard, availability, team agenda, coverage, and swaps on a real phone.
+- Before merging `codex/mobile-employee-ui` into `main`, remove the temporary `employeePreview` entry point, `src/lib/mobile-preview.ts`, its test, the preview-only UI banner, and the sign-in screen preview button. The bypass is already restricted to local development or the exact Vercel preview branch, and authenticated APIs remain protected.
 - Complete hosted invite, login, availability, schedule, coverage, and swap UAT across manager and employee devices.

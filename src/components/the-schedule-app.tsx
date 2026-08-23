@@ -559,10 +559,12 @@ function ScheduleExportButtons({
 
 export function TheScheduleApp({
   currentUser,
-  activeMemberEmails
+  activeMemberEmails,
+  previewMode = false
 }: {
   currentUser: AppAccess;
   activeMemberEmails: string[];
+  previewMode?: boolean;
 }) {
   const isManager = currentUser.role === "manager";
   const isDevelopmentTestMode = process.env.NODE_ENV !== "production";
@@ -583,11 +585,27 @@ export function TheScheduleApp({
     ];
   });
   const [uatRunId, setUatRunId] = useState(DEFAULT_UAT_RUN_ID);
-  const [period, setPeriod] = useState<SchedulePeriod>(schedulePeriod);
-  const [shifts, setShifts] = useState<Shift[]>(() => generateDefaultShifts(schedulePeriod));
-  const [availability, setAvailability] = useState<AvailabilitySubmission[]>([]);
-  const [coverage, setCoverage] = useState<CoverageRequest[]>([]);
-  const [swaps, setSwaps] = useState<SwapRequest[]>([]);
+  const [period, setPeriod] = useState<SchedulePeriod>(() =>
+    previewMode
+      ? {
+          ...schedulePeriod,
+          status: "published",
+          publishedAt: "2026-07-14T16:00:00.000Z"
+        }
+      : schedulePeriod
+  );
+  const [shifts, setShifts] = useState<Shift[]>(() =>
+    previewMode ? initialShifts : generateDefaultShifts(schedulePeriod)
+  );
+  const [availability, setAvailability] = useState<AvailabilitySubmission[]>(() =>
+    previewMode ? availabilitySubmissions : []
+  );
+  const [coverage, setCoverage] = useState<CoverageRequest[]>(() =>
+    previewMode ? coverageRequests : []
+  );
+  const [swaps, setSwaps] = useState<SwapRequest[]>(() =>
+    previewMode ? swapRequests : []
+  );
   const [auditLog, setAuditLog] = useState<AuditEntry[]>(DEFAULT_AUDIT_LOG);
   const [notifications, setNotifications] = useState<NotificationEntry[]>([]);
   const [availabilityDrafts, setAvailabilityDrafts] = useState<Record<string, Unavailability[]>>({});
@@ -603,8 +621,8 @@ export function TheScheduleApp({
   const [scheduleHistory, setScheduleHistory] = useState<ArchivedSchedule[]>([]);
   const [dayProgressionAction, setDayProgressionAction] = useState<DayProgressionAction | null>(null);
   const [dayProgressionMessage, setDayProgressionMessage] = useState("");
-  const [hasLoadedStoredState, setHasLoadedStoredState] = useState(false);
-  const [persistenceStatus, setPersistenceStatus] = useState<PersistenceStatus>("loading");
+  const [hasLoadedStoredState, setHasLoadedStoredState] = useState(previewMode);
+  const [persistenceStatus, setPersistenceStatus] = useState<PersistenceStatus>(previewMode ? "local" : "loading");
   const [testEmailStatus, setTestEmailStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [testEmailMessage, setTestEmailMessage] = useState("");
   const [selectedShiftId, setSelectedShiftId] = useState<string | null>(null);
@@ -860,6 +878,8 @@ export function TheScheduleApp({
   }, [activeEmployee.id]);
 
   useEffect(() => {
+    if (previewMode) return;
+
     let cancelled = false;
 
     function applyStoredState(stored: Partial<StoredTestState>) {
@@ -933,10 +953,10 @@ export function TheScheduleApp({
     return () => {
       cancelled = true;
     };
-  }, [currentUser.email, currentUser.name, currentUser.role, currentUser.userId]);
+  }, [currentUser.email, currentUser.name, currentUser.role, currentUser.userId, previewMode]);
 
   useEffect(() => {
-    if (!hasLoadedStoredState) return;
+    if (previewMode || !hasLoadedStoredState) return;
 
     const snapshot: StoredTestState = {
       uatRunId,
@@ -977,7 +997,7 @@ export function TheScheduleApp({
       });
 
     return () => controller.abort();
-  }, [auditLog, availability, availabilityDrafts, coverage, dayProgression, hasLoadedStoredState, inviteAcceptances, notifications, people, period, preferences, scheduleHistory, shifts, swaps, uatChecklist, uatIssues, uatRunId]);
+  }, [auditLog, availability, availabilityDrafts, coverage, dayProgression, hasLoadedStoredState, inviteAcceptances, notifications, people, period, preferences, previewMode, scheduleHistory, shifts, swaps, uatChecklist, uatIssues, uatRunId]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = currentTheme;
@@ -2568,8 +2588,22 @@ export function TheScheduleApp({
 
   const tabs = mode === "manager" ? managerTabs : employeeTabs;
 
+  function leaveEmployeeExperience() {
+    if (previewMode) {
+      window.location.assign("/");
+      return;
+    }
+
+    void signOut({ callbackUrl: "/" });
+  }
+
   return (
     <main className={cx("min-h-screen bg-paper text-ink", mode === "employee" && "max-md:overflow-x-hidden")}>
+      {previewMode && (
+        <div className="no-print border-b border-mall/20 bg-mall/10 px-4 py-2 text-center text-xs font-bold text-mall">
+          Employee UI preview · sample data only · changes reset on refresh
+        </div>
+      )}
       {mode === "employee" && (
         <MobileEmployeeHeader
           employee={activeEmployee}
@@ -2577,7 +2611,7 @@ export function TheScheduleApp({
           status={period.status}
           currentTheme={currentTheme}
           onToggleTheme={() => setThemePreference(currentTheme === "dark" ? "light" : "dark")}
-          onSignOut={() => void signOut({ callbackUrl: "/" })}
+          onSignOut={leaveEmployeeExperience}
         />
       )}
       <header className={cx("no-print sticky top-0 z-30 border-b border-line bg-white", mode === "employee" && "hidden md:block")}>
@@ -2641,7 +2675,7 @@ export function TheScheduleApp({
                 </Button>
               </>
             )}
-            <Button variant="secondary" onClick={() => void signOut({ callbackUrl: "/" })}>
+            <Button variant="secondary" onClick={leaveEmployeeExperience}>
               <LogOut size={16} />
               Sign out
             </Button>
