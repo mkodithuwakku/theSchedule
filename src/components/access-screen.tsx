@@ -15,6 +15,7 @@ import { useState } from "react";
 
 type AccessScreenProps = {
   authError?: string;
+  callbackUrl?: string;
   signedInEmail?: string;
 };
 
@@ -229,14 +230,18 @@ function MobileAccessScreen({
   );
 }
 
-export function AccessScreen({ authError, signedInEmail }: AccessScreenProps) {
+export function AccessScreen({
+  authError,
+  callbackUrl = "/",
+  signedInEmail,
+}: AccessScreenProps) {
   const [isRedirecting, setIsRedirecting] = useState(false);
   const isSignedInWithoutAccess = Boolean(signedInEmail);
   const hasAuthError = Boolean(authError);
 
   const startGoogleSignIn = () => {
     setIsRedirecting(true);
-    void signIn("google", { callbackUrl: "/" });
+    void signIn("google", { callbackUrl });
   };
 
   return (

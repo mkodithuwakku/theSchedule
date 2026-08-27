@@ -2,7 +2,9 @@ import { getServerSession } from "next-auth";
 import { AccessScreen } from "@/components/access-screen";
 import { TheScheduleApp } from "@/components/the-schedule-app";
 import { getCurrentAccess, normalizeEmail } from "@/lib/access";
+import { getAppBaseUrl } from "@/lib/app-url";
 import { authOptions } from "@/lib/auth";
+import { normalizeAuthCallbackUrl } from "@/lib/auth-callback";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -10,11 +12,19 @@ export const dynamic = "force-dynamic";
 export default async function Home({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{
+    callbackUrl?: string | string[];
+    error?: string;
+  }>;
 }) {
-  const { error } = await searchParams;
+  const { callbackUrl, error } = await searchParams;
+  const safeCallbackUrl = normalizeAuthCallbackUrl(
+    callbackUrl,
+    getAppBaseUrl(),
+  );
   const session = await getServerSession(authOptions);
-  if (!session?.user?.email) return <AccessScreen authError={error} />;
+  if (!session?.user?.email)
+    return <AccessScreen authError={error} callbackUrl={safeCallbackUrl} />;
 
   const access = await getCurrentAccess();
   if (!access)

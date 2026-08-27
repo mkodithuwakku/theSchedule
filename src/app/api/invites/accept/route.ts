@@ -20,19 +20,32 @@ export async function GET(request: Request) {
 
   const invitation = await prisma.storeInvitation.findUnique({
     where: { token },
-    include: { store: true }
+    include: { store: true },
   });
 
-  if (!invitation || invitation.acceptedAt || invitation.expiresAt < new Date()) {
+  if (
+    !invitation ||
+    invitation.acceptedAt ||
+    invitation.expiresAt < new Date()
+  ) {
     return redirectTo(request, "/?invite=invalid");
   }
 
   const session = await getServerSession(authOptions);
-  const sessionEmail = session?.user?.email ? normalizeEmail(session.user.email) : null;
+  const sessionEmail = session?.user?.email
+    ? normalizeEmail(session.user.email)
+    : null;
 
   if (!sessionEmail) {
-    const callbackUrl = `${getAppBaseUrl(request)}/api/invites/accept?token=${encodeURIComponent(token)}`;
-    return redirectTo(request, `/api/auth/signin?callbackUrl=${encodeURIComponent(callbackUrl)}`);
+    const callbackUrl = `/api/invites/accept?token=${encodeURIComponent(token)}`;
+    console.info("[invites/accept] Google sign-in required", {
+      invitationId: invitation.id,
+      storeId: invitation.storeId,
+    });
+    return redirectTo(
+      request,
+      `/api/auth/signin?callbackUrl=${encodeURIComponent(callbackUrl)}`,
+    );
   }
 
   if (sessionEmail !== normalizeEmail(invitation.email)) {
@@ -43,41 +56,41 @@ export async function GET(request: Request) {
     where: { email: sessionEmail },
     update: {
       role: invitation.role,
-      active: true
+      active: true,
     },
     create: {
       email: sessionEmail,
       name: session?.user?.name ?? invitation.email,
       role: invitation.role,
-      active: true
-    }
+      active: true,
+    },
   });
 
   await prisma.storeMembership.upsert({
     where: {
       storeId_userId: {
         storeId: invitation.storeId,
-        userId: user.id
-      }
+        userId: user.id,
+      },
     },
     update: {
       role: invitation.role,
-      active: true
+      active: true,
     },
     create: {
       storeId: invitation.storeId,
       userId: user.id,
       role: invitation.role,
-      active: true
-    }
+      active: true,
+    },
   });
 
   await prisma.storeInvitation.update({
     where: { id: invitation.id },
     data: {
       acceptedById: user.id,
-      acceptedAt: new Date()
-    }
+      acceptedAt: new Date(),
+    },
   });
 
   await prisma.auditLog.create({
@@ -89,9 +102,15 @@ export async function GET(request: Request) {
       entityId: invitation.id,
       afterJson: {
         email: invitation.email,
-        storeName: invitation.store.name
-      }
-    }
+        storeName: invitation.store.name,
+      },
+    },
+  });
+
+  console.info("[invites/accept] Invitation accepted", {
+    invitationId: invitation.id,
+    storeId: invitation.storeId,
+    userId: user.id,
   });
 
   return redirectTo(request, "/?invite=accepted");
