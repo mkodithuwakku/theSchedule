@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
-import { OWNER_ALERT_EMAIL, ownerAlertEmail, sendScheduleEmail } from "@/lib/email";
+import { OWNER_ALERT_EMAIL, sendScheduleEmail } from "@/lib/email";
 import { getCurrentAccess } from "@/lib/access";
+import { getAppBaseUrl } from "@/lib/app-url";
+import { actionNotificationEmail, ownerAlertEmail } from "@/lib/email-templates";
 import { appendWorkspaceNotification, readWorkspaceState } from "@/lib/workspace-state";
 import type { NotificationEntry } from "@/lib/demo-data";
 
@@ -63,7 +65,12 @@ export async function POST(request: Request) {
   const subject = body.subject ?? `Test notification for ${state.period.name}`;
   const html =
     body.html ??
-    `<p>This is a test notification from The Schedule for ${state.period.name}.</p>`;
+    actionNotificationEmail(
+      subject,
+      `This is a test notification from The Schedule for ${state.period.name}.`,
+      "Open The Schedule",
+      getAppBaseUrl(request)
+    ).html;
   const result = await sendScheduleEmail({
     to: recipient.email,
     subject,
@@ -75,14 +82,18 @@ export async function POST(request: Request) {
   }));
 
   if (!body.ownerAlert && result.status === "failed") {
-    const alert = ownerAlertEmail("Notification delivery failed", [
-      { label: "Notification type", value: body.type ?? "test_email" },
-      { label: "Subject", value: subject },
-      { label: "Recipient", value: `${recipient.name} <${recipient.email}>` },
-      { label: "Provider reason", value: result.reason ?? "Unknown failure" },
-      { label: "Schedule period", value: state.period.name },
-      { label: "Occurred at", value: new Date().toISOString() }
-    ]);
+    const alert = ownerAlertEmail(
+      "Notification delivery failed",
+      [
+        { label: "Notification type", value: body.type ?? "test_email" },
+        { label: "Subject", value: subject },
+        { label: "Recipient", value: `${recipient.name} <${recipient.email}>` },
+        { label: "Provider reason", value: result.reason ?? "Unknown failure" },
+        { label: "Schedule period", value: state.period.name },
+        { label: "Occurred at", value: new Date().toISOString() }
+      ],
+      getAppBaseUrl(request)
+    );
 
     await sendScheduleEmail({
       to: OWNER_ALERT_EMAIL,

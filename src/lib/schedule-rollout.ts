@@ -1,5 +1,5 @@
 import type { SchedulePeriod, Shift } from "@/lib/demo-data";
-import { availabilityReminderEmail, schedulePublishedEmail } from "@/lib/email";
+import { availabilityReminderEmail, schedulePublishedEmail } from "@/lib/email-templates";
 import type { StoredTestState } from "@/lib/test-state-shared";
 
 export const AVAILABILITY_REMINDER_DAYS_BEFORE_RELEASE = 3;

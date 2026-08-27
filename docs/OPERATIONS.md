@@ -62,6 +62,7 @@ While the consent app is in Google Testing status, add every intended Google acc
 4. Set the owner alert recipient.
 5. Redeploy after environment changes.
 6. Use `Settings` → email test, then confirm both provider status and actual inbox arrival.
+7. For action emails, confirm Gmail shows the primary action button and the copyable fallback URL beneath it. Invitation, availability, publication, shift, coverage, and swap messages all use this shared structure.
 
 ### Vercel
 

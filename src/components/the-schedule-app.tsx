@@ -26,6 +26,7 @@ import {
 import { signOut } from "next-auth/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AppAccess } from "@/lib/access-shared";
+import { actionNotificationEmail, ownerAlertEmail } from "@/lib/email-templates";
 import { availabilityReminderDate, dateInTimeZone } from "@/lib/schedule-rollout";
 import {
   type AuditEntry,
@@ -773,9 +774,9 @@ export function TheScheduleApp({
   const notificationPreviews = [
     {
       type: "employee_invited",
-      subject: `Join ${store.name} on The Schedule`,
+      subject: "You've been invited to The Schedule",
       recipient: "New employee",
-      body: `Invite link for ${store.name}.`
+      body: "Invitation action and fallback link."
     },
     {
       type: "availability_submitted",
@@ -1183,43 +1184,11 @@ export function TheScheduleApp({
   }
 
   function buildNotificationHtml(subject: string, detail: string, actionLabel = "Open The Schedule") {
-    return `
-      <h1>${subject}</h1>
-      <p>${detail}</p>
-      <p><a href="${window.location.origin}">${actionLabel}</a></p>
-    `;
-  }
-
-  function escapeHtml(value: string) {
-    return value
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
+    return actionNotificationEmail(subject, detail, actionLabel, window.location.origin).html;
   }
 
   function buildOwnerAlertHtml(title: string, rows: Array<{ label: string; value: string }>) {
-    return `
-      <h1>${escapeHtml(title)}</h1>
-      <p>The Schedule needs attention.</p>
-      <table cellpadding="6" cellspacing="0" style="border-collapse: collapse;">
-        ${rows
-          .map(
-            (row) => `
-              <tr>
-                <td style="font-weight: 700; border-bottom: 1px solid #ddd;">${escapeHtml(row.label)}</td>
-                <td style="border-bottom: 1px solid #ddd;">${escapeHtml(row.value)}</td>
-              </tr>
-            `
-          )
-          .join("")}
-        <tr>
-          <td style="font-weight: 700; border-bottom: 1px solid #ddd;">App URL</td>
-          <td style="border-bottom: 1px solid #ddd;"><a href="${window.location.origin}">${window.location.origin}</a></td>
-        </tr>
-      </table>
-    `;
+    return ownerAlertEmail(title, rows, window.location.origin).html;
   }
 
   function sendOwnerAlert(type: string, title: string, rows: Array<{ label: string; value: string }>) {
