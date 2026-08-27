@@ -96,6 +96,7 @@ Important UX expectations from the user:
 
 - Test-mode scenario buttons: Fresh pre-release, Availability submitted, Draft generated, Published.
 - Server-backed test persistence through `/api/test-state`, with browser localStorage fallback.
+- Shared workspace state revalidates whenever a browser tab becomes active, and visible manager sessions poll every five seconds so employee submissions appear without a manual resubmission or page reload. Client saves are briefly consolidated to reduce overlapping whole-workspace writes.
 - Production-visible guided full schedule run followed by a 117-flow advanced manager UAT plan, with shared manual status tracking, filtering, and CSV/JSON export.
 - Manager-only day progression can archive a published period, open the next draft, advance or jump to the reminder date, run real deduplicated reminder delivery, and repeat after the next publication.
 - One bounded Neon schedule backup per store, overwritten daily or on demand, automatically refreshed before destructive resets, and restorable by an active manager.

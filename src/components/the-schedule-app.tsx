@@ -24,7 +24,7 @@ import {
   X
 } from "lucide-react";
 import { signOut } from "next-auth/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AppAccess } from "@/lib/access-shared";
 import { actionNotificationEmail, ownerAlertEmail } from "@/lib/email-templates";
 import { availabilityReminderDate, dateInTimeZone } from "@/lib/schedule-rollout";
@@ -89,6 +89,13 @@ import {
   RESTORE_WORKSPACE_CONFIRMATION,
   type WorkspaceBackupStatus
 } from "@/lib/workspace-backup-shared";
+import {
+  hasWorkspaceStateChanged,
+  MANAGER_WORKSPACE_REFRESH_MS,
+  WORKSPACE_FOCUS_RETRY_MS,
+  WORKSPACE_SAVE_DEBOUNCE_MS,
+  workspaceStateFingerprint
+} from "@/lib/workspace-sync";
 
 type TabId =
   | "dashboard"
@@ -648,6 +655,12 @@ export function TheScheduleApp({
     category: "ui" as UatIssueCategory,
     note: ""
   });
+  const lastSyncedStateRef = useRef<string | null>(null);
+  const refreshRequestRef = useRef<AbortController | null>(null);
+  const saveRequestRef = useRef<AbortController | null>(null);
+  const saveSequenceRef = useRef(0);
+  const savePendingRef = useRef(false);
+  const skipNextPersistenceRef = useRef(false);
 
   const nameFor = (id?: string) => id === "owner_alert" ? "Application Owner" : people.find((employee) => employee.id === id)?.name ?? "Unassigned";
   const signedInEmployee = people.find((employee) => employee.email.toLowerCase() === currentUser.email);
@@ -860,46 +873,46 @@ export function TheScheduleApp({
     setSwapForm({ requesterShiftId: "", targetShiftId: "", reason: "" });
   }, [activeEmployee.id]);
 
+  const applyStoredState = useCallback((stored: Partial<StoredTestState>) => {
+    const storedPeriod = stored.period ?? schedulePeriod;
+    if (stored.uatRunId) setUatRunId(stored.uatRunId);
+    if (stored.people) {
+      const hasSignedInPerson = stored.people.some((employee) => employee.email.toLowerCase() === currentUser.email);
+      setPeople(
+        hasSignedInPerson
+          ? stored.people
+          : [
+              ...stored.people,
+              {
+                id: `account_${currentUser.userId}`,
+                name: currentUser.name,
+                email: currentUser.email,
+                role: currentUser.role,
+                active: true
+              }
+            ]
+      );
+    }
+    if (stored.period) setPeriod(stored.period);
+    if (stored.shifts) {
+      setShifts(stored.shifts.length > 0 ? stored.shifts : generateDefaultShifts(storedPeriod));
+    }
+    if (stored.availability) setAvailability(stored.availability);
+    if (stored.coverage) setCoverage(stored.coverage);
+    if (stored.swaps) setSwaps(stored.swaps);
+    if (stored.auditLog) setAuditLog(stored.auditLog);
+    if (stored.notifications) setNotifications(stored.notifications);
+    if (stored.availabilityDrafts) setAvailabilityDrafts(stored.availabilityDrafts);
+    if (stored.preferences) setPreferences(stored.preferences);
+    if (stored.uatIssues) setUatIssues(stored.uatIssues);
+    if (stored.inviteAcceptances) setInviteAcceptances(stored.inviteAcceptances);
+    if (stored.uatChecklist) setUatChecklist(stored.uatChecklist);
+    if (stored.dayProgression) setDayProgression(stored.dayProgression);
+    if (stored.scheduleHistory) setScheduleHistory(stored.scheduleHistory);
+  }, [currentUser.email, currentUser.name, currentUser.role, currentUser.userId]);
+
   useEffect(() => {
     let cancelled = false;
-
-    function applyStoredState(stored: Partial<StoredTestState>) {
-      const storedPeriod = stored.period ?? schedulePeriod;
-      if (stored.uatRunId) setUatRunId(stored.uatRunId);
-      if (stored.people) {
-        const hasSignedInPerson = stored.people.some((employee) => employee.email.toLowerCase() === currentUser.email);
-        setPeople(
-          hasSignedInPerson
-            ? stored.people
-            : [
-                ...stored.people,
-                {
-                  id: `account_${currentUser.userId}`,
-                  name: currentUser.name,
-                  email: currentUser.email,
-                  role: currentUser.role,
-                  active: true
-                }
-              ]
-        );
-      }
-      if (stored.period) setPeriod(stored.period);
-      if (stored.shifts) {
-        setShifts(stored.shifts.length > 0 ? stored.shifts : generateDefaultShifts(storedPeriod));
-      }
-      if (stored.availability) setAvailability(stored.availability);
-      if (stored.coverage) setCoverage(stored.coverage);
-      if (stored.swaps) setSwaps(stored.swaps);
-      if (stored.auditLog) setAuditLog(stored.auditLog);
-      if (stored.notifications) setNotifications(stored.notifications);
-      if (stored.availabilityDrafts) setAvailabilityDrafts(stored.availabilityDrafts);
-      if (stored.preferences) setPreferences(stored.preferences);
-      if (stored.uatIssues) setUatIssues(stored.uatIssues);
-      if (stored.inviteAcceptances) setInviteAcceptances(stored.inviteAcceptances);
-      if (stored.uatChecklist) setUatChecklist(stored.uatChecklist);
-      if (stored.dayProgression) setDayProgression(stored.dayProgression);
-      if (stored.scheduleHistory) setScheduleHistory(stored.scheduleHistory);
-    }
 
     async function loadSavedState() {
       try {
@@ -908,7 +921,9 @@ export function TheScheduleApp({
         const stored = (await response.json()) as StoredTestState;
         if (cancelled) return;
 
+        skipNextPersistenceRef.current = true;
         applyStoredState(stored);
+        lastSyncedStateRef.current = workspaceStateFingerprint(stored);
         window.localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
         setPersistenceStatus("saved");
       } catch {
@@ -934,10 +949,70 @@ export function TheScheduleApp({
     return () => {
       cancelled = true;
     };
-  }, [currentUser.email, currentUser.name, currentUser.role, currentUser.userId]);
+  }, [applyStoredState]);
 
   useEffect(() => {
     if (!hasLoadedStoredState) return;
+    let cancelled = false;
+    let retryTimer: number | undefined;
+
+    async function refreshSavedState() {
+      if (cancelled || document.visibilityState === "hidden" || refreshRequestRef.current || savePendingRef.current) return;
+
+      const controller = new AbortController();
+      refreshRequestRef.current = controller;
+      try {
+        const response = await fetch("/api/test-state", { cache: "no-store", signal: controller.signal });
+        if (!response.ok) throw new Error("Unable to refresh server test state.");
+        const stored = (await response.json()) as StoredTestState;
+        if (cancelled || controller.signal.aborted) return;
+
+        if (hasWorkspaceStateChanged(stored, lastSyncedStateRef.current)) {
+          skipNextPersistenceRef.current = true;
+          applyStoredState(stored);
+          lastSyncedStateRef.current = workspaceStateFingerprint(stored);
+          window.localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
+        }
+        setPersistenceStatus("saved");
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setPersistenceStatus("local");
+      } finally {
+        if (refreshRequestRef.current === controller) refreshRequestRef.current = null;
+      }
+    }
+
+    function refreshAfterTabReturn() {
+      if (document.visibilityState === "hidden") return;
+      void refreshSavedState();
+      if (retryTimer) window.clearTimeout(retryTimer);
+      retryTimer = window.setTimeout(() => void refreshSavedState(), WORKSPACE_FOCUS_RETRY_MS);
+    }
+
+    window.addEventListener("focus", refreshAfterTabReturn);
+    document.addEventListener("visibilitychange", refreshAfterTabReturn);
+    const managerRefreshInterval = isManager
+      ? window.setInterval(() => void refreshSavedState(), MANAGER_WORKSPACE_REFRESH_MS)
+      : undefined;
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", refreshAfterTabReturn);
+      document.removeEventListener("visibilitychange", refreshAfterTabReturn);
+      if (retryTimer) window.clearTimeout(retryTimer);
+      if (managerRefreshInterval) window.clearInterval(managerRefreshInterval);
+      refreshRequestRef.current?.abort();
+      refreshRequestRef.current = null;
+    };
+  }, [applyStoredState, hasLoadedStoredState, isManager]);
+
+  useEffect(() => {
+    if (!hasLoadedStoredState) return;
+    if (skipNextPersistenceRef.current) {
+      skipNextPersistenceRef.current = false;
+      savePendingRef.current = false;
+      return;
+    }
 
     const snapshot: StoredTestState = {
       uatRunId,
@@ -961,23 +1036,36 @@ export function TheScheduleApp({
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
 
     const controller = new AbortController();
+    const saveSequence = ++saveSequenceRef.current;
+    savePendingRef.current = true;
     setPersistenceStatus("saving");
-    void fetch("/api/test-state", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(snapshot),
-      signal: controller.signal
-    })
-      .then((response) => {
-        if (!response.ok) throw new Error("Unable to save server test state.");
-        setPersistenceStatus(response.headers.get("X-Test-State-Persisted") === "false" ? "local" : "saved");
+    const saveTimer = window.setTimeout(() => {
+      saveRequestRef.current = controller;
+      void fetch("/api/test-state", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(snapshot),
+        signal: controller.signal
       })
-      .catch((error: unknown) => {
-        if (error instanceof DOMException && error.name === "AbortError") return;
-        setPersistenceStatus("local");
-      });
+        .then((response) => {
+          if (!response.ok) throw new Error("Unable to save server test state.");
+          lastSyncedStateRef.current = workspaceStateFingerprint(snapshot);
+          setPersistenceStatus(response.headers.get("X-Test-State-Persisted") === "false" ? "local" : "saved");
+        })
+        .catch((error: unknown) => {
+          if (error instanceof DOMException && error.name === "AbortError") return;
+          setPersistenceStatus("local");
+        })
+        .finally(() => {
+          if (saveRequestRef.current === controller) saveRequestRef.current = null;
+          if (saveSequenceRef.current === saveSequence) savePendingRef.current = false;
+        });
+    }, WORKSPACE_SAVE_DEBOUNCE_MS);
 
-    return () => controller.abort();
+    return () => {
+      window.clearTimeout(saveTimer);
+      controller.abort();
+    };
   }, [auditLog, availability, availabilityDrafts, coverage, dayProgression, hasLoadedStoredState, inviteAcceptances, notifications, people, period, preferences, scheduleHistory, shifts, swaps, uatChecklist, uatIssues, uatRunId]);
 
   useEffect(() => {
