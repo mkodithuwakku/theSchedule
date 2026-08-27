@@ -3931,7 +3931,8 @@ export function TheScheduleApp({
                       <p className="mt-2 text-sm leading-6 text-ink/70">
                         It clears the workspace, checklist, invitations, normalized schedule data, notification deduplication,
                         audit logs, Google account links, and active sessions. The manager and UAlberta employee start active.
-                        Hockey and Bobby are removed from the directory so you can invite them through the real email flow.
+                        Hockey, Bobby, and any extra test invitees are removed from Neon when they have no other store membership,
+                        so you can invite them again through the real email flow.
                       </p>
                     </div>
                   </div>

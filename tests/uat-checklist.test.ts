@@ -6,7 +6,13 @@ import {
   normalizeUatChecklistProgress
 } from "@/lib/uat-checklist";
 import { GUIDED_UAT_ACCOUNTS, GUIDED_UAT_PHASES, GUIDED_UAT_STEPS } from "@/lib/guided-uat";
-import { CLEAN_RUN_ACTIVE_EMAILS, createCleanRunTestState, createDefaultTestState, normalizeTestState } from "@/lib/test-state";
+import {
+  CLEAN_RUN_ACTIVE_EMAILS,
+  CLEAN_RUN_REINVITE_EMAILS,
+  createCleanRunTestState,
+  createDefaultTestState,
+  normalizeTestState
+} from "@/lib/test-state";
 import { CLEAN_RUN_CONFIRMATION, isCleanRunConfirmation } from "@/lib/uat-reset-shared";
 
 test("production UAT checklist is extensive and has unique stable IDs", () => {
@@ -87,6 +93,9 @@ test("a clean production run leaves two accounts for real email invitations", ()
   const cleanRun = createCleanRunTestState("uat_invite_run", new Date("2026-08-17T18:00:00.000Z"));
 
   assert.deepEqual(cleanRun.people.map((person) => person.email), [...CLEAN_RUN_ACTIVE_EMAILS]);
-  assert.equal(cleanRun.people.some((person) => person.email === "m.kodithuwakku.hockey@gmail.com"), false);
-  assert.equal(cleanRun.people.some((person) => person.email === "bobby.cazby@gmail.com"), false);
+  assert.deepEqual(CLEAN_RUN_REINVITE_EMAILS, [
+    "m.kodithuwakku.hockey@gmail.com",
+    "bobby.cazby@gmail.com"
+  ]);
+  assert(CLEAN_RUN_REINVITE_EMAILS.every((email) => !cleanRun.people.some((person) => person.email === email)));
 });

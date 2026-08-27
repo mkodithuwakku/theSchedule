@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Prisma, ScheduleStatus, UserRole } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { CLEAN_RUN_ACTIVE_EMAILS, createCleanRunTestState } from "@/lib/test-state";
+import { CLEAN_RUN_ACTIVE_EMAILS, CLEAN_RUN_REINVITE_EMAILS, createCleanRunTestState } from "@/lib/test-state";
 import { overwriteWorkspaceBackupWithClient } from "@/lib/workspace-backup";
 export { CLEAN_RUN_CONFIRMATION, isCleanRunConfirmation } from "@/lib/uat-reset-shared";
 
@@ -47,7 +47,7 @@ export async function resetProductionUat(storeId: string) {
     ].map((email) => email.trim().toLowerCase()));
     const candidateUsers = await transaction.user.findMany({
       where: { email: { in: [...candidateEmails] } },
-      select: { id: true }
+      select: { id: true, email: true }
     });
     const candidateUserIds = candidateUsers.map((user) => user.id);
 
@@ -56,18 +56,19 @@ export async function resetProductionUat(storeId: string) {
     const removedInvitations = await transaction.storeInvitation.deleteMany({ where: { storeId } });
     const removedPeriods = await transaction.schedulePeriod.deleteMany({ where: { storeId } });
 
-    const canonicalEmails = new Set(CANONICAL_UAT_USERS.map((user) => user.email));
+    // Only the two persistent test identities survive a clean run. Every other
+    // membership from this store is removed before orphaned UAT users are deleted.
     await transaction.storeMembership.deleteMany({
       where: {
         storeId,
         user: {
-          email: { notIn: [...canonicalEmails] }
+          email: { notIn: [...CLEAN_RUN_ACTIVE_EMAILS] }
         }
       }
     });
 
     const canonicalUsers: Array<{ id: string; role: UserRole }> = [];
-    for (const fixture of CANONICAL_UAT_USERS) {
+    for (const fixture of CANONICAL_UAT_USERS.filter((user) => cleanRunActiveEmailSet.has(user.email))) {
       const user = await transaction.user.upsert({
         where: { email: fixture.email },
         update: {
@@ -84,17 +85,26 @@ export async function resetProductionUat(storeId: string) {
         select: { id: true, role: true }
       });
       canonicalUsers.push(user);
-      const startsActive = cleanRunActiveEmailSet.has(fixture.email);
       await transaction.storeMembership.upsert({
         where: { storeId_userId: { storeId, userId: user.id } },
-        update: { role: fixture.role, active: startsActive },
-        create: { storeId, userId: user.id, role: fixture.role, active: startsActive }
+        update: { role: fixture.role, active: true },
+        create: { storeId, userId: user.id, role: fixture.role, active: true }
       });
     }
 
     const allAuthUserIds = [...new Set([...candidateUserIds, ...canonicalUsers.map((user) => user.id)])];
     const removedSessions = await transaction.session.deleteMany({ where: { userId: { in: allAuthUserIds } } });
     const removedAccounts = await transaction.account.deleteMany({ where: { userId: { in: allAuthUserIds } } });
+
+    const removableUserIds = candidateUsers
+      .filter((user) => user.email && !cleanRunActiveEmailSet.has(user.email.trim().toLowerCase()))
+      .map((user) => user.id);
+    const removedUsers = await transaction.user.deleteMany({
+      where: {
+        id: { in: removableUserIds },
+        memberships: { none: {} }
+      }
+    });
 
     const manager = canonicalUsers.find((user) => user.role === UserRole.manager);
     if (!manager) throw new Error("The canonical manager could not be restored.");
@@ -132,7 +142,8 @@ export async function resetProductionUat(storeId: string) {
       resetAt: resetAt.toISOString(),
       restoredUsers: canonicalUsers.length,
       activeUsers: CLEAN_RUN_ACTIVE_EMAILS.length,
-      awaitingInvitationUsers: CANONICAL_UAT_USERS.length - CLEAN_RUN_ACTIVE_EMAILS.length,
+      awaitingInvitationUsers: CLEAN_RUN_REINVITE_EMAILS.length,
+      removedUsers: removedUsers.count,
       removedAccounts: removedAccounts.count,
       removedSessions: removedSessions.count,
       removedInvitations: removedInvitations.count,

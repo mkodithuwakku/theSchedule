@@ -21,6 +21,11 @@ export const CLEAN_RUN_ACTIVE_EMAILS = [
   "kodithuw@ualberta.ca"
 ] as const;
 
+export const CLEAN_RUN_REINVITE_EMAILS = [
+  "m.kodithuwakku.hockey@gmail.com",
+  "bobby.cazby@gmail.com"
+] as const;
+
 const cleanRunActiveEmailSet = new Set<string>(CLEAN_RUN_ACTIVE_EMAILS);
 
 function clone<T>(value: T): T {
@@ -104,8 +109,8 @@ export function createCleanRunTestState(uatRunId: string, now = new Date()): Sto
   const state = createDefaultTestState(uatRunId);
   return {
     ...state,
-    // Keep two known identities active and leave the other two out of the
-    // directory so the manager can exercise the real invitation flow.
+    // Keep only the two persistent identities. The database reset removes
+    // reinvite identities so the manager can exercise the real invitation flow.
     people: state.people.filter((person) => cleanRunActiveEmailSet.has(person.email.toLowerCase())),
     period,
     shifts: generateDefaultShifts(period),

@@ -100,7 +100,7 @@ Important UX expectations from the user:
 - Manager-only day progression can archive a published period, open the next draft, advance or jump to the reminder date, run real deduplicated reminder delivery, and repeat after the next publication.
 - One bounded Neon schedule backup per store, overwritten daily or on demand, automatically refreshed before destructive resets, and restorable by an active manager.
 - Every successful workspace save refreshes the same backup row; the cron covers idle days, while same-day manual and `pre_reset` snapshots are preserved from automatic save overwrites.
-- Manager-only clean-run reset for first-login retesting, guarded by typed confirmation and stale-run write rejection. It intentionally leaves Hockey and Bobby inactive and outside the workspace directory so their Resend invitation emails and Google acceptance can be tested.
+- Manager-only clean-run reset for first-login retesting, guarded by typed confirmation and stale-run write rejection. It deletes Hockey, Bobby, and orphaned extra test invitees from Neon so their user creation, Resend invitation emails, and Google acceptance can be tested from zero.
 - UAT issue tracker and exports.
 - Notification preview center and notification log.
 - Owner alerts for reported UAT issues, notification delivery failures, and notification API outages.

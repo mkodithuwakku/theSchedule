@@ -42,7 +42,7 @@ Before starting:
 4. Keep the manager window available for checking `Saved`, `Notifications`, and `UAT Issues`.
 5. Record the test date, deployed commit, browser/device, and tester name in your external notes or exported result file.
 
-After a clean production reset, only the manager and Employee A are active. Employees B and C intentionally start outside the directory with inactive memberships. Invite both from the Employees screen, confirm both emails arrive, and accept each link with the matching Google account before testing their employee actions.
+After a clean production reset, only the manager and Employee A remain active. Employees B and C are removed from the workspace and Neon user records so they can be created again by a fresh invitation. Invite both from the Employees screen, confirm both emails arrive, and accept each link with the matching Google account before testing their employee actions.
 
 ## How to use the in-app checklist
 
