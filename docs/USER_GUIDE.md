@@ -87,7 +87,7 @@ After a clean production UAT reset, use this flow to invite `m.kodithuwakku.hock
 ### Accept an invitation as the employee
 
 1. Open the invitation email in a private window or the employee's own browser profile.
-2. Select the invitation link.
+2. Select `Accept invitation`. If the button does not open, copy the fallback link shown directly below it into the browser.
 3. If prompted, select `Continue with Google`.
 4. Choose the exact invited email.
 5. Wait for the employee dashboard and accepted-invitation message.

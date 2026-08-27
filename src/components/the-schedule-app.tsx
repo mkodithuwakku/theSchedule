@@ -2244,11 +2244,11 @@ export function TheScheduleApp({
     setNewEmployee({ firstName: "", lastName: "", email: "" });
     const notificationId = addNotification(
       "employee_invited",
-      `Join ${store.name} on The Schedule`,
+      "You've been invited to The Schedule",
       employee.id,
       buildNotificationHtml(
-        `Join ${store.name} on The Schedule`,
-        `${currentIdentity?.name ?? "Your manager"} invited you to join ${store.name} as an employee. Use your approved Gmail account to accept the invitation and submit availability.`,
+        "You've been invited to The Schedule",
+        "Use the Google account this invitation was sent to to accept it and access The Schedule.",
         "Accept invitation"
       ),
       { to: employee.email, recipientName: employee.name },

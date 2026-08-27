@@ -82,7 +82,7 @@ export async function POST(request: Request) {
   });
 
   const inviteUrl = `${getAppBaseUrl(request)}/api/invites/accept?token=${invitation.token}`;
-  const message = employeeInviteEmail(store.name, inviteUrl, developmentManager?.name ?? "Your manager");
+  const message = employeeInviteEmail(inviteUrl);
   const provider = await sendScheduleEmail({
     to: email,
     subject: message.subject,

@@ -90,14 +90,42 @@ export function availabilityReminderEmail(periodName: string, deadline: string, 
   };
 }
 
-export function employeeInviteEmail(storeName: string, inviteUrl: string, managerName: string) {
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+export function employeeInviteEmail(inviteUrl: string) {
+  const safeInviteUrl = escapeHtml(inviteUrl);
+
   return {
-    subject: `You're invited to join ${storeName} on The Schedule`,
+    subject: "You've been invited to The Schedule",
     html: `
-      <h1>Join The Schedule</h1>
-      <p>${managerName} invited you to join ${storeName} as an employee.</p>
-      <p>Use your approved Gmail account to accept the invite and submit availability.</p>
-      <p><a href="${inviteUrl}">Accept invitation</a></p>
+      <div style="margin: 0 auto; max-width: 560px; padding: 32px 20px; font-family: Arial, Helvetica, sans-serif; color: #121824;">
+        <h1 style="margin: 0 0 16px; font-size: 28px; line-height: 1.2;">You've been invited to The Schedule</h1>
+        <p style="margin: 0 0 24px; color: #5f6877; font-size: 16px; line-height: 1.6;">
+          Use the Google account this email was sent to to accept your invitation and access The Schedule.
+        </p>
+        <table role="presentation" cellpadding="0" cellspacing="0" style="margin: 0 0 24px;">
+          <tr>
+            <td style="border-radius: 10px; background: #0f62a3;">
+              <a href="${safeInviteUrl}" style="display: inline-block; padding: 14px 22px; color: #ffffff; font-size: 16px; font-weight: 700; text-decoration: none;">
+                Accept invitation
+              </a>
+            </td>
+          </tr>
+        </table>
+        <p style="margin: 0 0 8px; color: #5f6877; font-size: 13px; line-height: 1.5;">
+          If the button does not work, copy and paste this link into your browser:
+        </p>
+        <p style="margin: 0; font-size: 13px; line-height: 1.5; word-break: break-all;">
+          <a href="${safeInviteUrl}" style="color: #0f62a3;">${safeInviteUrl}</a>
+        </p>
+      </div>
     `
   };
 }
