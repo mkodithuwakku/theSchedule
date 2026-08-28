@@ -1,4 +1,6 @@
+import type { Route } from "next";
 import { getServerSession } from "next-auth";
+import { redirect } from "next/navigation";
 import { AccessScreen } from "@/components/access-screen";
 import { TheScheduleApp } from "@/components/the-schedule-app";
 import { getCurrentAccess, normalizeEmail } from "@/lib/access";
@@ -23,6 +25,12 @@ export default async function Home({
     getAppBaseUrl(),
   );
   const session = await getServerSession(authOptions);
+  if (
+    session?.user?.email &&
+    safeCallbackUrl.startsWith("/api/invites/accept?token=")
+  ) {
+    redirect(safeCallbackUrl as Route);
+  }
   if (!session?.user?.email)
     return <AccessScreen authError={error} callbackUrl={safeCallbackUrl} />;
 

@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { NextResponse } from "next/server";
 import { UserRole } from "@prisma/client";
 import { getCurrentAccess } from "@/lib/access";
-import { getAppBaseUrl } from "@/lib/app-url";
+import { buildInvitationUrl, getAppBaseUrl } from "@/lib/app-url";
 import { employeeInviteEmail, sendScheduleEmail } from "@/lib/email";
 import { prisma } from "@/lib/prisma";
 
@@ -81,7 +81,7 @@ export async function POST(request: Request) {
     }
   });
 
-  const inviteUrl = `${getAppBaseUrl(request)}/api/invites/accept?token=${invitation.token}`;
+  const inviteUrl = buildInvitationUrl(getAppBaseUrl(request), invitation.token);
   const message = employeeInviteEmail(inviteUrl);
   const provider = await sendScheduleEmail({
     to: email,

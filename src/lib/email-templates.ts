@@ -22,13 +22,20 @@ function emailFrame(title: string, content: string) {
   `;
 }
 
-function emailAction(actionLabel: string, actionUrl: string) {
+function emailAction(
+  actionLabel: string,
+  actionUrl: string,
+  options: { openInNewWindow?: boolean } = {}
+) {
   const safeActionUrl = escapeEmailHtml(actionUrl);
+  const browserAttributes = options.openInNewWindow
+    ? ' target="_blank" rel="noopener noreferrer"'
+    : "";
   return `
     <table role="presentation" cellpadding="0" cellspacing="0" style="margin: 24px 0;">
       <tr>
         <td style="border-radius: 10px; background: #0f62a3;">
-          <a href="${safeActionUrl}" style="display: inline-block; padding: 14px 22px; color: #ffffff; font-size: 16px; font-weight: 700; text-decoration: none;">
+          <a href="${safeActionUrl}"${browserAttributes} style="display: block; padding: 14px 22px; color: #ffffff; font-size: 16px; font-weight: 700; text-align: center; text-decoration: none;">
             ${escapeEmailHtml(actionLabel)}
           </a>
         </td>
@@ -38,19 +45,25 @@ function emailAction(actionLabel: string, actionUrl: string) {
       If the button does not work, copy and paste this link into your browser:
     </p>
     <p style="margin: 0; font-size: 13px; line-height: 1.5; word-break: break-all;">
-      <a href="${safeActionUrl}" style="color: #0f62a3;">${safeActionUrl}</a>
+      <a href="${safeActionUrl}"${browserAttributes} style="color: #0f62a3;">${safeActionUrl}</a>
     </p>
   `;
 }
 
-export function actionNotificationEmail(title: string, detail: string, actionLabel: string, actionUrl: string) {
+export function actionNotificationEmail(
+  title: string,
+  detail: string,
+  actionLabel: string,
+  actionUrl: string,
+  options?: { openInNewWindow?: boolean }
+) {
   return {
     subject: title,
     html: emailFrame(
       title,
       `
         <p style="margin: 0; color: #5f6877; font-size: 16px; line-height: 1.6;">${escapeEmailHtml(detail)}</p>
-        ${emailAction(actionLabel, actionUrl)}
+        ${emailAction(actionLabel, actionUrl, options)}
       `
     )
   };
@@ -110,8 +123,9 @@ export function availabilityReminderEmail(periodName: string, deadline: string, 
 export function employeeInviteEmail(inviteUrl: string) {
   return actionNotificationEmail(
     "You've been invited to The Schedule",
-    "Use the Google account this email was sent to to accept your invitation and access The Schedule.",
+    "Use the Google account this email was sent to to accept your invitation and access The Schedule. On a phone, the button opens your browser to finish signing in.",
     "Accept invitation",
-    inviteUrl
+    inviteUrl,
+    { openInNewWindow: true }
   );
 }

@@ -11,3 +11,11 @@ export function getAppBaseUrl(request?: Request) {
 
   return "http://localhost:3000";
 }
+
+export function buildInvitationUrl(appBaseUrl: string, token: string) {
+  const acceptancePath = `/api/invites/accept?token=${encodeURIComponent(token)}`;
+  const invitationUrl = new URL("/", appBaseUrl);
+  invitationUrl.searchParams.set("callbackUrl", acceptancePath);
+  invitationUrl.searchParams.set("invite", "pending");
+  return invitationUrl.toString();
+}

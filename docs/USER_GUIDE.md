@@ -87,7 +87,7 @@ After a clean production UAT reset, use this flow to invite `m.kodithuwakku.hock
 ### Accept an invitation as the employee
 
 1. Open the invitation email in a private window or the employee's own browser profile.
-2. Select `Accept invitation`. If the button does not open, copy the fallback link shown directly below it into the browser.
+2. Select `Accept invitation`. On mobile, the invitation opens the normal app sign-in page in a fresh browser context. If the button does not open, copy the fallback link shown directly below it into the browser.
 3. If prompted, select `Continue with Google`.
 4. Choose the exact invited email.
 5. Wait for the employee dashboard and accepted-invitation message.
@@ -168,7 +168,7 @@ The dashboard and navigation badge should also show missing submissions. If the 
 4. Wait for the calendar to populate.
 5. Review every week from Sunday through Saturday.
 
-Auto-complete uses store templates and availability rules. A generated draft still requires manager review.
+Auto-complete uses store templates and availability rules. It assigns each employee at most once per calendar day. If no eligible employee remains, the shift stays unfilled and appears as a blocking schedule error for manual cover.
 
 ### Assign or reassign a shift
 
@@ -178,7 +178,7 @@ Auto-complete uses store templates and availability rules. A generated draft sti
 4. Confirm the name changes on the calendar.
 5. Wait for `Saved`.
 
-When no available employee exists, the UI may require a deliberate override with an audit explanation. Never ignore a conflict without confirming it with the affected employee.
+An unavailable employee or an employee already working another shift that day cannot be assigned. If nobody eligible remains, enter a name in `Manual cover` for that shift.
 
 ### Add a shift
 
@@ -198,7 +198,7 @@ When no available employee exists, the UI may require a deliberate override with
 ### Find unfinished work
 
 1. Select the `Unassigned` filter.
-2. Resolve every visible unassigned shift.
+2. Resolve every visible unassigned shift by choosing an eligible employee or entering `Manual cover`.
 3. Turn the filter off.
 4. Review the whole calendar for readable names, correct dates, reasonable hours, and availability conflicts.
 
@@ -206,7 +206,7 @@ When no available employee exists, the UI may require a deliberate override with
 
 1. In `Builder`, select `Publish`.
 2. Read the full confirmation screen.
-3. Review every warning.
+3. Review every blocking error and warning. Final publication stays disabled until every unfilled, duplicate same-day, availability-conflict, or invalid-time error is resolved.
 4. Confirm the notification recipient list includes every active staff member.
 5. Review the per-employee hours snapshot.
 6. If anything is wrong, cancel, correct the draft, and reopen the review.

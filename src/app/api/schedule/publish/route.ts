@@ -4,6 +4,7 @@ import type { SchedulePeriod, Shift } from "@/lib/demo-data";
 import { getCurrentAccess, normalizeEmail } from "@/lib/access";
 import { prisma } from "@/lib/prisma";
 import { sendPublishedScheduleNotifications } from "@/lib/schedule-notifications";
+import { getScheduleBlockingIssues } from "@/lib/schedule-builder";
 import { readWorkspaceState, writeWorkspaceState } from "@/lib/workspace-state";
 
 type PublishRequest = {
@@ -29,6 +30,17 @@ export async function POST(request: Request) {
   }
   if (body.shifts.some((shift) => shift.schedulePeriodId !== body.period?.id)) {
     return NextResponse.json({ error: "Every shift must belong to the active schedule period." }, { status: 400 });
+  }
+
+  const blockingIssues = getScheduleBlockingIssues(body.shifts, existing.availability, existing.people);
+  if (blockingIssues.length > 0) {
+    return NextResponse.json(
+      {
+        error: `The schedule has ${blockingIssues.length} blocking error${blockingIssues.length === 1 ? "" : "s"}. Resolve every unfilled, duplicate, unavailable, or invalid shift before publishing.`,
+        issues: blockingIssues
+      },
+      { status: 400 }
+    );
   }
 
   const publishedAt = new Date().toISOString();

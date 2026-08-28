@@ -65,7 +65,7 @@ Example request shape:
 }
 ```
 
-The route normalizes the email, verifies manager access to the store, upserts an active employee user, creates a random invitation token expiring in 14 days, sends the invitation, and creates a `NotificationLog` row. The response contains invitation metadata and provider status. Do not expose the returned `inviteUrl` in logs or public documentation because it is an access token.
+The route normalizes the email, verifies manager access to the store, upserts an active employee user, creates a random invitation token expiring in 14 days, sends the invitation, and creates a `NotificationLog` row. The emailed action opens the normal application sign-in page with a same-origin acceptance callback, which is more reliable from mobile email clients; after Google sign-in, the callback continues to the acceptance route. The response contains invitation metadata and provider status. Do not expose the returned `inviteUrl` in logs or public documentation because it is an access token.
 
 ### `GET /api/invites/accept`
 
@@ -86,7 +86,7 @@ Request shape:
 }
 ```
 
-The real payload contains the full current period and at least one full shift. The route rejects a period that differs from the current workspace or shifts belonging to another period. On success it:
+The real payload contains the full current period and at least one full shift. The route rejects a period that differs from the current workspace, shifts belonging to another period, unfilled shifts, duplicate same-day assignments for one employee, assignments that conflict with submitted availability, and invalid time ranges. Manual-cover names count as filled shifts. On success it:
 
 1. marks the period published;
 2. preserves original employee and time values for reporting;

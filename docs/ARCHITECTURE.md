@@ -84,10 +84,11 @@ sequenceDiagram
 1. A schedule period opens for availability.
 2. Each active staff member submits full availability or one or more unavailable entries.
 3. The manager checks completion in `Availability`.
-4. `Builder` creates shifts from active templates and assigns available staff.
-5. The manager reviews warnings, recipients, and projected hours.
-6. `/api/schedule/publish` validates the active period, persists the published state, writes audit data, and sends one consolidated schedule email per active member.
-7. Publication notifications use deterministic keys so retries do not create duplicate messages.
+4. `Builder` creates shifts from active templates and assigns each available staff member at most once per day.
+5. Slots without an eligible employee remain unfilled, render as blocking errors, and require an eligible reassignment or manual-cover name.
+6. The manager reviews blocking errors, warnings, recipients, and projected hours.
+7. `/api/schedule/publish` independently rejects unfilled shifts, duplicate same-day employee assignments, availability conflicts, and invalid times before persisting or emailing.
+8. Publication notifications use deterministic keys so retries do not create duplicate messages.
 
 ### Coverage
 

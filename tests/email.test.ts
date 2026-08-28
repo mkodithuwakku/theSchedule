@@ -23,6 +23,8 @@ test("employee invitation includes a prominent action and fallback link without 
   assert.equal(message.subject, "You've been invited to The Schedule");
   assert.match(message.html, /You&#039;ve been invited to The Schedule/);
   assertActionEmail(message.html, "Accept invitation", inviteUrl);
+  assert.equal(message.html.match(/target="_blank" rel="noopener noreferrer"/g)?.length, 2);
+  assert.match(message.html, /opens your browser to finish signing in/);
   assert.doesNotMatch(message.html, /manager/i);
 });
 

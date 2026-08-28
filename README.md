@@ -78,7 +78,7 @@ Employees who have not submitted availability see a highlighted `Availability` t
 The manager account can switch to `My employee view` for its own availability, shifts, coverage, and swaps. It cannot impersonate another employee.
 The workspace persists through Neon. Browser storage remains only a temporary resilience fallback when the API cannot be reached.
 Schedule views render as Sunday-start calendar weeks.
-In the manager builder, click a shift to open the assignment panel, use `Unassigned` to filter unassigned shifts, and `Publish` warns before publishing with unassigned shifts.
+In the manager builder, click a shift to open the assignment panel and use `Unassigned` to isolate unfinished slots. Auto-complete never assigns one employee to multiple shifts on the same day. Unfillable slots become blocking errors and require an eligible employee or a `Manual cover` entry before publishing.
 Coverage requests and shift swaps are included in the saved test state, so they survive refreshes and can be tested across manager/employee role switches.
 The manager `Test Plan` tab starts with a guided full schedule run. It walks the manager through the normal business journey in order: initial manager/employee sign-in, live invitations for two more employees, every normal availability style, draft generation and editing, publish review, employee schedule review, coverage, swaps, reports, issue handling, backup, and sign-out. Each step includes the exact account, clicks, expected result, and a saved Not run/Passed/Failed/Blocked result. The same result also updates the matching advanced test.
 

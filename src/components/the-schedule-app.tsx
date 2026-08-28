@@ -38,7 +38,6 @@ import {
   type SwapRequest,
   type Unavailability,
   type UnavailableType,
-  availableEmployeesForShift,
   buildHoursCsv,
   calculateHours,
   availabilitySubmissions,
@@ -61,6 +60,12 @@ import {
   toMinutes,
   type NotificationEntry
 } from "@/lib/demo-data";
+import {
+  autoAssignDraftShifts,
+  getScheduleBlockingIssues,
+  isEmployeeAssignedOnDate,
+  isShiftFilled
+} from "@/lib/schedule-builder";
 import {
   DEFAULT_UAT_RUN_ID,
   STORAGE_KEY,
@@ -725,13 +730,21 @@ export function TheScheduleApp({
   );
   const activeEmployeeRequestCount = employeeCoverageAlerts.length + employeeSwapAlerts.length;
   const selectedShift = shifts.find((shift) => shift.id === selectedShiftId) ?? null;
-  const unassignedShifts = shifts.filter((shift) => !shift.employeeId);
+  const unassignedShifts = shifts.filter((shift) => !isShiftFilled(shift));
   const assignedPendingInviteShifts = shifts.filter((shift) => {
     const employee = shift.employeeId ? people.find((person) => person.id === shift.employeeId) : undefined;
     return employee ? inviteStatusFor(employee) !== "active" : false;
   });
   const assignedConflictShifts = shifts.filter((shift) =>
     shift.employeeId ? isEmployeeUnavailable(shift.employeeId, shift, availability) : false
+  );
+  const scheduleBlockingIssues = useMemo(
+    () => getScheduleBlockingIssues(shifts, availability, people),
+    [availability, people, shifts]
+  );
+  const blockingShiftIds = useMemo(
+    () => new Set(scheduleBlockingIssues.map((issue) => issue.shiftId)),
+    [scheduleBlockingIssues]
   );
   const openUatIssues = uatIssues.filter((issue) => issue.status === "open");
   const resolvedUatIssues = uatIssues.filter((issue) => issue.status === "resolved");
@@ -756,11 +769,8 @@ export function TheScheduleApp({
   const canChangeAvailability = availabilityHasOpened && !availabilityDeadlinePassed;
   const canAutoAssignSchedule = schedulableEmployees.length > 0 && missingAvailability.length === 0;
   const publishWarnings = [
-    shifts.length === 0 ? "Generate or add at least one shift before publishing." : "",
     missingAvailability.length > 0 ? `${missingAvailability.length} employee${missingAvailability.length === 1 ? " has" : "s have"} not submitted availability.` : "",
-    unassignedShifts.length > 0 ? `${unassignedShifts.length} shift${unassignedShifts.length === 1 ? " is" : "s are"} unassigned.` : "",
-    assignedPendingInviteShifts.length > 0 ? `${assignedPendingInviteShifts.length} shift${assignedPendingInviteShifts.length === 1 ? " is" : "s are"} assigned to invited employees.` : "",
-    assignedConflictShifts.length > 0 ? `${assignedConflictShifts.length} assigned shift${assignedConflictShifts.length === 1 ? " conflicts" : "s conflict"} with submitted availability.` : ""
+    assignedPendingInviteShifts.length > 0 ? `${assignedPendingInviteShifts.length} shift${assignedPendingInviteShifts.length === 1 ? " is" : "s are"} assigned to invited employees.` : ""
   ].filter(Boolean);
   const completedUatItems = UAT_CHECKLIST_ITEMS.filter((item) => uatChecklist[item.id] === "passed").length;
   const failedUatItems = UAT_CHECKLIST_ITEMS.filter((item) => uatChecklist[item.id] === "failed").length;
@@ -1448,25 +1458,18 @@ export function TheScheduleApp({
     const selected = schedulableEmployees.find((employee) => employee.id === employeeId);
     if (!selected || !selected.active) return;
 
-    const unavailable = isEmployeeUnavailable(employeeId, target, availability);
-    const available = availableEmployeesForShift(target, schedulableEmployees, availability);
-
-    if (unavailable && available.length > 0) {
-      window.alert(`${selected.name} is unavailable. Assign ${available[0].name} or another available employee first.`);
+    if (isEmployeeAssignedOnDate(shifts, employeeId, target.date, shiftId)) {
+      window.alert(
+        `${selected.name} is already working on ${getDayName(target.date)}. Each employee can be assigned only one shift per day. Use a manual cover entry if no other employee is available.`
+      );
       return;
     }
 
-    if (unavailable) {
-      const confirmed = window.confirm(
-        `${selected.name} is unavailable for this shift. No available employees remain. Confirm an audited override?`
+    if (isEmployeeUnavailable(employeeId, target, availability)) {
+      window.alert(
+        `${selected.name} is unavailable for this shift. Choose another employee or use a manual cover entry.`
       );
-      if (!confirmed) return;
-      addAudit(
-        "availability_override",
-        "Shift",
-        shiftId,
-        `Override approved for ${selected.name} on ${getDayName(target.date)} ${formatTime(target.startTime)}.`
-      );
+      return;
     }
 
     setShifts((current) => current.map((shift) => (shift.id === shiftId ? { ...shift, employeeId, externalAssigneeName: undefined } : shift)));
@@ -1482,58 +1485,14 @@ export function TheScheduleApp({
     addAudit("shift_assigned", "Shift", shiftId, `Assigned ${selected.name} to ${getDayName(target.date)}.`);
   }
 
-  function autoAssignDraft(
-    generated: Shift[],
-    sourcePeople = schedulableEmployees,
-    sourceAvailability = availability
-  ) {
-    const totals = new Map(sourcePeople.map((employee) => [employee.id, { shifts: 0, hours: 0 }]));
-    generated.forEach((shift) => {
-      if (!shift.employeeId || !totals.has(shift.employeeId)) return;
-      const current = totals.get(shift.employeeId) ?? { shifts: 0, hours: 0 };
-      totals.set(shift.employeeId, {
-        shifts: current.shifts + 1,
-        hours: current.hours + shiftDurationHours(shift)
-      });
-    });
-
-    return generated.map((shift) => {
-      if (shift.employeeId || shift.externalAssigneeName) return shift;
-
-      const candidates = sourcePeople
-        .filter((employee) => employee.active && !isEmployeeUnavailable(employee.id, shift, sourceAvailability))
-        .map((employee) => {
-          const total = totals.get(employee.id) ?? { shifts: 0, hours: 0 };
-          return {
-            employee,
-            shifts: total.shifts,
-            hours: total.hours,
-            tieBreaker: Math.random()
-          };
-        })
-        .sort((a, b) => a.shifts - b.shifts || a.hours - b.hours || a.tieBreaker - b.tieBreaker);
-
-      const selected = candidates[0]?.employee;
-      if (!selected) return shift;
-
-      const current = totals.get(selected.id) ?? { shifts: 0, hours: 0 };
-      totals.set(selected.id, {
-        shifts: current.shifts + 1,
-        hours: current.hours + shiftDurationHours(shift)
-      });
-
-      return {
-        ...shift,
-        employeeId: selected.id
-      };
-    });
-  }
-
   function generateDraft() {
     const existingBlocks = shifts.length > 0 ? shifts : generateDefaultShifts(period);
-    const generated = canAutoAssignSchedule ? autoAssignDraft(existingBlocks) : existingBlocks;
+    const generated = canAutoAssignSchedule
+      ? autoAssignDraftShifts(existingBlocks, schedulableEmployees, availability)
+      : existingBlocks;
+    const unfilledCount = generated.filter((shift) => !isShiftFilled(shift)).length;
     setShifts(generated);
-    setSelectedShiftId(generated[0]?.id ?? null);
+    setSelectedShiftId(generated.find((shift) => !isShiftFilled(shift))?.id ?? generated[0]?.id ?? null);
     setPeriod((current) => ({ ...current, status: "draft", publishedAt: undefined }));
     addNotification(
       "draft_generated",
@@ -1542,7 +1501,9 @@ export function TheScheduleApp({
       buildNotificationHtml(
         `Draft generated: ${period.name}`,
         canAutoAssignSchedule
-          ? `${generated.length} shift slots kept their times and empty names were filled against availability.`
+          ? unfilledCount > 0
+            ? `${generated.length - unfilledCount} shift slots were assigned. ${unfilledCount} could not be filled without assigning someone twice that day and require manual cover.`
+            : `${generated.length} shift slots kept their times and were filled against availability without assigning anyone twice in one day.`
           : `${generated.length} shift slots are ready without names. Collect availability before auto-completing.`
       )
     );
@@ -1551,7 +1512,9 @@ export function TheScheduleApp({
       "SchedulePeriod",
       period.id,
       canAutoAssignSchedule
-        ? "Auto-completed employee names into the current shift slots."
+        ? unfilledCount > 0
+          ? `Auto-completed valid assignments and left ${unfilledCount} shift slots for manual cover.`
+          : "Auto-completed employee names without duplicate same-day assignments."
         : "Kept shift slots unassigned because accepted employees have not all submitted availability."
     );
   }
@@ -1597,8 +1560,35 @@ export function TheScheduleApp({
 
     const nextStart = updates.startTime ?? target.startTime;
     const nextEnd = updates.endTime ?? target.endTime;
+    const nextDate = updates.date ?? target.date;
     if (!isValidTimeRange(nextStart, nextEnd)) {
       window.alert("End time must be later than start time.");
+      return;
+    }
+
+    const timeOrDateChanged = updates.date !== undefined || updates.startTime !== undefined || updates.endTime !== undefined;
+    if (
+      timeOrDateChanged &&
+      target.employeeId &&
+      isEmployeeAssignedOnDate(shifts, target.employeeId, nextDate, shiftId)
+    ) {
+      window.alert(
+        `${nameFor(target.employeeId)} is already working on ${getDayName(nextDate)}. Move this shift to a different day or use a manual cover entry.`
+      );
+      return;
+    }
+    if (
+      timeOrDateChanged &&
+      target.employeeId &&
+      isEmployeeUnavailable(
+        target.employeeId,
+        { ...target, date: nextDate, startTime: nextStart, endTime: nextEnd },
+        availability
+      )
+    ) {
+      window.alert(
+        `${nameFor(target.employeeId)} is unavailable for the updated shift time. Choose another employee or use a manual cover entry.`
+      );
       return;
     }
 
@@ -1640,7 +1630,6 @@ export function TheScheduleApp({
       );
     }
 
-    const timeOrDateChanged = updates.date !== undefined || updates.startTime !== undefined || updates.endTime !== undefined;
     if (!timeOrDateChanged) return;
 
     setShifts((current) =>
@@ -1649,7 +1638,7 @@ export function TheScheduleApp({
           shift.id === shiftId
             ? {
                 ...shift,
-                date: updates.date ?? shift.date,
+                date: nextDate,
                 startTime: nextStart,
                 endTime: nextEnd
               }
@@ -1722,6 +1711,15 @@ export function TheScheduleApp({
   }
 
   async function confirmPublishSchedule() {
+    if (scheduleBlockingIssues.length > 0) {
+      setPublishStatus("idle");
+      setSelectedShiftId(scheduleBlockingIssues[0]?.shiftId ?? null);
+      window.alert(
+        `This schedule has ${scheduleBlockingIssues.length} blocking error${scheduleBlockingIssues.length === 1 ? "" : "s"}. Resolve every highlighted shift before publishing.`
+      );
+      return;
+    }
+
     setPublishStatus("publishing");
     const publishShifts = shifts.map((shift) => ({
         ...shift,
@@ -2554,7 +2552,7 @@ export function TheScheduleApp({
               email: employee.email,
               name: employee.name
             }));
-    const generatedDraft = autoAssignDraft(defaultShiftBlocks, employees, presetAvailability);
+    const generatedDraft = autoAssignDraftShifts(defaultShiftBlocks, employees, presetAvailability);
     const nextPeriod =
       preset === "published"
         ? { ...schedulePeriod, status: "published" as const, publishedAt: "2026-07-14T16:00:00.000Z" }
@@ -3147,11 +3145,16 @@ export function TheScheduleApp({
               <Metric label="Selected" value={selectedShift ? shortDayLabel(selectedShift.date) : "-"} detail={selectedShift ? `${formatTime(selectedShift.startTime)}-${formatTime(selectedShift.endTime)}` : "Choose a shift"} />
             </div>
             <Section title="Publish Readiness" icon={<ShieldCheck size={18} />}>
-              <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+              <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-6">
                 {[
                   { label: "Shift blocks ready", done: shifts.length > 0, detail: `${shifts.length} shifts` },
                   { label: "Availability collected", done: missingAvailability.length === 0, detail: `${missingAvailability.length} missing` },
                   { label: "All shifts assigned", done: unassignedShifts.length === 0 && shifts.length > 0, detail: `${unassignedShifts.length} unassigned` },
+                  {
+                    label: "One shift per person/day",
+                    done: !scheduleBlockingIssues.some((issue) => issue.code === "duplicate_employee_day"),
+                    detail: `${scheduleBlockingIssues.filter((issue) => issue.code === "duplicate_employee_day").length} duplicate assignments`
+                  },
                   { label: "Invites accepted", done: assignedPendingInviteShifts.length === 0, detail: `${assignedPendingInviteShifts.length} pending` },
                   { label: "No availability conflicts", done: assignedConflictShifts.length === 0, detail: `${assignedConflictShifts.length} conflicts` }
                 ].map((item) => (
@@ -3165,6 +3168,31 @@ export function TheScheduleApp({
                 ))}
               </div>
             </Section>
+            {scheduleBlockingIssues.length > 0 && (
+              <Section title="Schedule Errors" icon={<AlertTriangle size={18} />}>
+                <div className="rounded-lg border border-warn bg-warn/10 p-4">
+                  <div className="font-black text-warn">
+                    Resolve {scheduleBlockingIssues.length} blocking error{scheduleBlockingIssues.length === 1 ? "" : "s"} before publishing
+                  </div>
+                  <p className="mt-1 text-sm text-ink/70">
+                    Auto-complete will leave a slot empty instead of assigning an employee who is unavailable or already working that day. Select each highlighted slot and enter manual cover when no employee remains.
+                  </p>
+                  <div className="mt-3 grid gap-2">
+                    {scheduleBlockingIssues.map((issue, index) => (
+                      <button
+                        className="rounded-md border border-warn/40 bg-white p-3 text-left text-sm font-semibold text-ink transition hover:border-warn"
+                        key={`${issue.code}:${issue.shiftId}:${index}`}
+                        onClick={() => setSelectedShiftId(issue.shiftId)}
+                        type="button"
+                      >
+                        <span className="mr-2 font-black text-warn">Error</span>
+                        {issue.message}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </Section>
+            )}
             {showPublishReview && (
               <Section
                 title="Publish Confirmation"
@@ -3175,9 +3203,16 @@ export function TheScheduleApp({
                       <X size={16} />
                       Cancel
                     </Button>
-                    <Button onClick={() => void confirmPublishSchedule()} disabled={publishStatus === "publishing"}>
+                    <Button
+                      onClick={() => void confirmPublishSchedule()}
+                      disabled={publishStatus === "publishing" || scheduleBlockingIssues.length > 0}
+                    >
                       <Check size={16} />
-                      {publishStatus === "publishing" ? "Publishing and emailing" : "Confirm publish"}
+                      {publishStatus === "publishing"
+                        ? "Publishing and emailing"
+                        : scheduleBlockingIssues.length > 0
+                          ? "Resolve schedule errors"
+                          : "Confirm publish"}
                     </Button>
                   </div>
                 }
@@ -3193,8 +3228,32 @@ export function TheScheduleApp({
                       <div className="text-xs font-semibold uppercase tracking-normal text-ink/55">Final review</div>
                       <div className="mt-2 text-2xl font-black">{period.name}</div>
                       <p className="mt-1 text-sm text-ink/65">
-                        {shifts.length} shifts, {shifts.filter((shift) => shift.employeeId).length} assigned, {unassignedShifts.length} unassigned.
+                        {shifts.length} shifts, {shifts.filter((shift) => isShiftFilled(shift)).length} filled, {unassignedShifts.length} unfilled.
                       </p>
+                    </div>
+                    <div className="rounded-lg border border-line p-4">
+                      <div className="font-black">Blocking errors</div>
+                      <div className="mt-3 grid gap-2">
+                        {scheduleBlockingIssues.length === 0 ? (
+                          <div className="rounded-md border border-approve/30 bg-approve/10 p-3 text-sm font-semibold text-approve">
+                            No blocking schedule errors.
+                          </div>
+                        ) : (
+                          scheduleBlockingIssues.map((issue, index) => (
+                            <button
+                              className="rounded-md border border-warn bg-warn/10 p-3 text-left text-sm font-semibold text-warn"
+                              key={`${issue.code}:${issue.shiftId}:review:${index}`}
+                              onClick={() => {
+                                setSelectedShiftId(issue.shiftId);
+                                setShowPublishReview(false);
+                              }}
+                              type="button"
+                            >
+                              {issue.message}
+                            </button>
+                          ))
+                        )}
+                      </div>
                     </div>
                     <div className="rounded-lg border border-line p-4">
                       <div className="font-black">Warnings</div>
@@ -3260,6 +3319,7 @@ export function TheScheduleApp({
                 onAddShiftForDate={addShiftForDate}
                 selectedShift={selectedShift}
                 selectedShiftId={selectedShiftId}
+                blockingShiftIds={blockingShiftIds}
                 onSelectShift={setSelectedShiftId}
                 showOnlyUnassigned={showOnlyUnassigned}
                 action={
@@ -4822,6 +4882,7 @@ function ScheduleGrid({
   onAddShiftForDate,
   selectedShift,
   selectedShiftId,
+  blockingShiftIds = new Set<string>(),
   onSelectShift,
   showOnlyUnassigned = false,
   className
@@ -4839,6 +4900,7 @@ function ScheduleGrid({
   onAddShiftForDate?: (date: string) => void;
   selectedShift?: Shift | null;
   selectedShiftId?: string | null;
+  blockingShiftIds?: Set<string>;
   onSelectShift?: (shiftId: string) => void;
   showOnlyUnassigned?: boolean;
   className?: string;
@@ -4909,13 +4971,13 @@ function ScheduleGrid({
                 onChange={(event) => onUpdateShift(selectedShift.id, { endTime: event.target.value })}
               />
             </Field>
-            <Field label="External cover">
+            <Field label="Manual cover">
               <div className="flex gap-2">
                 <input
                   className={inputBase}
                   value={externalName}
                   onChange={(event) => setExternalName(event.target.value)}
-                  placeholder="Owner family"
+                  placeholder="Enter cover name"
                 />
                 <button
                   className="h-9 shrink-0 rounded-md border border-line bg-white px-3 text-xs font-black text-ink hover:bg-paper"
@@ -4942,6 +5004,16 @@ function ScheduleGrid({
               {activePeople.map((employee) => {
                 const stats = employeeStats(employee.id);
                 const unavailable = isEmployeeUnavailable(employee.id, selectedShift, availability);
+                const alreadyWorking = calendarWeeks.some((week) =>
+                  week.some((day) =>
+                    day.shifts.some(
+                      (shift) =>
+                        shift.id !== selectedShift.id &&
+                        shift.date === selectedShift.date &&
+                        shift.employeeId === employee.id
+                    )
+                  )
+                );
                 const assigned = selectedShift.employeeId === employee.id;
                 return (
                   <button
@@ -4950,8 +5022,9 @@ function ScheduleGrid({
                       "rounded-md border px-3 py-2 text-left text-sm transition hover:border-mall",
                       loadTone(employee.id),
                       assigned && "ring-2 ring-mall/30",
-                      unavailable && "border-warn bg-warn/10"
+                      (unavailable || alreadyWorking) && "border-warn bg-warn/10"
                     )}
+                    disabled={!assigned && (unavailable || alreadyWorking)}
                     onClick={() => onUpdateShift(selectedShift.id, { employeeId: employee.id })}
                     type="button"
                   >
@@ -4960,6 +5033,7 @@ function ScheduleGrid({
                       {(stats?.hours ?? 0).toFixed(1)}h / {stats?.shifts ?? 0} shifts
                       {stats ? ` / ${stats.averageDelta >= 0 ? "+" : ""}${stats.averageDelta.toFixed(1)}` : ""}
                       {unavailable ? " / unavailable" : ""}
+                      {alreadyWorking ? " / already working this day" : ""}
                     </span>
                   </button>
                 );
@@ -4983,7 +5057,9 @@ function ScheduleGrid({
               <div key={`week-${weekIndex}`} className="grid grid-cols-7 border-b border-line last:border-b-0">
                 {week.map(({ date, inPeriod, shifts }) => {
                   const dayHours = storeHours.find((entry) => entry.dayOfWeek === parseLocalDate(date).getDay());
-                  const visibleShifts = showOnlyUnassigned ? shifts.filter((shift) => !shift.employeeId) : shifts;
+                  const visibleShifts = showOnlyUnassigned
+                    ? shifts.filter((shift) => !isShiftFilled(shift))
+                    : shifts;
 
                   return (
                     <div
@@ -5015,6 +5091,7 @@ function ScheduleGrid({
                         {inPeriod &&
                           visibleShifts.map((shift) => {
                             const assignedUnavailable = shift.employeeId ? isEmployeeUnavailable(shift.employeeId, shift, availability) : false;
+                            const hasBlockingError = blockingShiftIds.has(shift.id);
                             const isSelected = selectedShiftId === shift.id;
                             return (
                               <div
@@ -5023,7 +5100,7 @@ function ScheduleGrid({
                                   "cursor-pointer rounded-md border p-2 transition hover:border-mall hover:bg-white",
                                   loadTone(shift.employeeId),
                                   isSelected ? "border-mall ring-2 ring-mall/20" : "border-line",
-                                  assignedUnavailable && "border-warn bg-warn/10"
+                                  (assignedUnavailable || hasBlockingError) && "border-warn bg-warn/10"
                                 )}
                                 onClick={() => onSelectShift?.(shift.id)}
                                 onKeyDown={(event) => {
@@ -5056,12 +5133,17 @@ function ScheduleGrid({
                                   )}
                                 </div>
                                 {showAssignments && (
-                                  assignedUnavailable && (
+                                  hasBlockingError ? (
+                                    <div className="mt-1 flex items-center gap-1 text-xs font-black text-warn">
+                                      <AlertTriangle size={13} />
+                                      {isShiftFilled(shift) ? "Error — edit this assignment" : "Error — manual cover required"}
+                                    </div>
+                                  ) : assignedUnavailable ? (
                                     <div className="mt-1 flex items-center gap-1 text-xs font-semibold text-warn">
                                       <AlertTriangle size={13} />
                                       Conflict
                                     </div>
-                                  )
+                                  ) : null
                                 )}
                               </div>
                             );

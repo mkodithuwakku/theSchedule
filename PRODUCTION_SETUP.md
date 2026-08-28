@@ -92,7 +92,7 @@ Changing a person's access is a database operation on `StoreMembership.role` and
    Verify the seeded manager email in Neon before inviting employees. A placeholder such as `manager@example.com` must not remain the only manager membership.
 
 7. Send production invites from the hosted app.
-   The manager adds an employee email in the Employees tab. The app creates a database invite and emails a link to `/api/invites/accept?token=...`.
+   The manager adds an employee email in the Employees tab. The app creates a database invite and emails a mobile-safe application link that preserves `/api/invites/accept?token=...` as the post-Google-sign-in callback.
 
 8. Redeploy on Vercel after the schema update.
    Keep `NEXTAUTH_URL` and `NEXT_PUBLIC_APP_URL` equal to the canonical HTTPS domain, then confirm the Google redirect URI uses that same domain exactly.
