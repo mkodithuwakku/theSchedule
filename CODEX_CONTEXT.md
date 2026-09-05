@@ -22,7 +22,7 @@ The current product goal is hosted, authenticated UAT with Google identities and
 - `src/lib/test-state-shared.ts` defines the persisted JSON test-state contract used by the client and API route.
 - `src/lib/test-state.ts` normalizes the JSON-backed test-state payload.
 - `src/lib/guided-uat.ts` defines the ordered, click-by-click normal schedule journey shown first in Test Plan, including progression into the next schedule.
-- `src/lib/uat-checklist.ts` defines the 117-flow advanced production UAT plan and validates persisted manual results; guided steps reuse matching advanced IDs.
+- `src/lib/uat-checklist.ts` defines the 119-flow advanced production UAT plan and validates persisted manual results; guided steps reuse matching advanced IDs.
 - `src/lib/schedule-progression.ts` creates semi-monthly schedule periods (days 1-14, then day 15 through month-end), advances the shared manager-controlled UAT date, and keeps bounded six-period publication history.
 - `src/lib/uat-reset.ts` performs the manager-only clean-run reset, clears OAuth/session and UAT artifacts, starts two identities active, leaves Hockey/Bobby awaiting fresh invitations, and creates a new run identifier.
 - `src/lib/auth.ts` configures Google/Auth.js and permits verified Google identities to link to pre-seeded or invited user records on first login.
@@ -97,7 +97,7 @@ Important UX expectations from the user:
 - Test-mode scenario buttons: Fresh pre-release, Availability submitted, Draft generated, Published.
 - Server-backed test persistence through `/api/test-state`, with browser localStorage fallback.
 - Shared workspace state revalidates whenever a browser tab becomes active, and visible manager sessions poll every five seconds so employee submissions appear without a manual resubmission or page reload. Client saves are briefly consolidated to reduce overlapping whole-workspace writes.
-- Production-visible guided full schedule run followed by a 117-flow advanced manager UAT plan, with shared manual status tracking, filtering, and CSV/JSON export.
+- Production-visible guided full schedule run followed by a 119-flow advanced manager UAT plan, with shared manual status tracking, filtering, and CSV/JSON export.
 - Manager-only day progression can archive a published period, open the next draft, advance or jump to the reminder date, run real deduplicated reminder delivery, and repeat after the next publication.
 - One bounded Neon schedule backup per store, overwritten daily or on demand, automatically refreshed before destructive resets, and restorable by an active manager.
 - Every successful workspace save refreshes the same backup row; the cron covers idle days, while same-day manual and `pre_reset` snapshots are preserved from automatic save overwrites.
@@ -110,6 +110,7 @@ Important UX expectations from the user:
 - Database-deduplicated availability reminder emails three days before release.
 - Consolidated schedule publication emails with Resend provider IDs and failure reasons in `NotificationLog`.
 - Invitation email actions open the regular application sign-in page in a fresh browser context and preserve the token acceptance route as the same-origin Google callback for reliable mobile handoff.
+- Managers can correct the name or email on a pending invitation and resend it; resending replaces the token, renews the 14-day expiry, logs delivery, and is unavailable after acceptance.
 - Schedule auto-complete assigns an employee at most once per day. Unfillable slots, duplicate same-day assignments, availability conflicts, and invalid time ranges are blocking errors; manual cover resolves an otherwise unfillable slot, and the publication API independently enforces the same rules.
 
 ## Future Expansion Notes

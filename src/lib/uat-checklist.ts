@@ -168,7 +168,7 @@ export const UAT_CHECKLIST_GROUPS: UatChecklistGroup[] = [
   {
     id: "invites",
     title: "3. Employee directory and invitation lifecycle",
-    description: "Test valid, invalid, duplicated, mismatched, expired, reused, and accepted invitation paths.",
+    description: "Test valid, editable, resent, invalid, duplicated, mismatched, expired, reused, and accepted invitation paths.",
     items: [
       {
         id: "invite-valid",
@@ -241,6 +241,22 @@ export const UAT_CHECKLIST_GROUPS: UatChecklistGroup[] = [
         actor: "Manager",
         steps: ["Edit an employee, save a new name, then try a duplicate email.", "Cancel a second edit."],
         expected: "Valid edits persist, duplicate email is blocked, and Cancel leaves the stored profile unchanged."
+      },
+      {
+        id: "invite-edit-pending",
+        title: "Manager corrects a pending invitation",
+        actor: "Manager",
+        steps: ["Invite an employee using an incorrect email.", "Select Edit, correct the email, and save."],
+        expected: "The directory and server invitation both use the corrected email while the employee remains invited and inactive.",
+        critical: true
+      },
+      {
+        id: "invite-resend",
+        title: "Manager resends a pending invitation",
+        actor: "Manager",
+        steps: ["Correct a pending invitation if needed.", "Select Resend invite and check the newest recipient email."],
+        expected: "A fresh token replaces the old token, expiry returns to 14 days, delivery is logged, and only the newest link can be accepted.",
+        critical: true
       }
     ]
   },

@@ -651,6 +651,12 @@ export function TheScheduleApp({
     email: ""
   });
   const [editingEmployeeId, setEditingEmployeeId] = useState<string | null>(null);
+  const [savingEmployeeId, setSavingEmployeeId] = useState<string | null>(null);
+  const [resendingInviteId, setResendingInviteId] = useState<string | null>(null);
+  const [inviteActionFeedback, setInviteActionFeedback] = useState<{
+    tone: "success" | "error";
+    message: string;
+  } | null>(null);
   const [employeeEdit, setEmployeeEdit] = useState<EmployeeForm>({
     firstName: "",
     lastName: "",
@@ -2259,13 +2265,46 @@ export function TheScheduleApp({
     setEmployeeEdit({ firstName: "", lastName: "", email: "" });
   }
 
-  function saveEmployeeEdit(employeeId: string) {
+  async function saveEmployeeEdit(employeeId: string) {
+    const employee = people.find((person) => person.id === employeeId);
     const email = employeeEdit.email.trim().toLowerCase();
     const name = employeeFullName(employeeEdit);
-    if (!name || !email) return;
+    if (!employee || !name || !email) return;
     if (people.some((employee) => employee.id !== employeeId && employee.email.toLowerCase() === email)) {
       window.alert("That Gmail account is already approved.");
       return;
+    }
+
+    if (inviteStatusFor(employee) === "invited") {
+      setSavingEmployeeId(employeeId);
+      setInviteActionFeedback(null);
+      try {
+        const response = await fetch("/api/invites", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            currentEmail: employee.email,
+            email,
+            name,
+            storeId: store.id,
+          }),
+        });
+        const result = (await response.json()) as {
+          employee?: { name: string; email: string };
+          error?: string;
+        };
+        if (!response.ok || !result.employee) {
+          throw new Error(result.error ?? "Unable to update the pending invitation.");
+        }
+      } catch (error) {
+        setInviteActionFeedback({
+          tone: "error",
+          message: error instanceof Error ? error.message : "Unable to update the pending invitation.",
+        });
+        return;
+      } finally {
+        setSavingEmployeeId(null);
+      }
     }
 
     setPeople((current) =>
@@ -2274,8 +2313,80 @@ export function TheScheduleApp({
     setInviteAcceptances((current) =>
       current.map((acceptance) => (acceptance.employeeId === employeeId ? { ...acceptance, name, email } : acceptance))
     );
-    addAudit("employee_updated", "User", employeeId, `Updated employee info for ${name}.`);
+    addAudit(
+      inviteStatusFor(employee) === "invited" ? "employee_invite_updated" : "employee_updated",
+      "User",
+      employeeId,
+      inviteStatusFor(employee) === "invited"
+        ? `Updated the pending invitation for ${name} to ${email}.`
+        : `Updated employee info for ${name}.`,
+    );
+    setInviteActionFeedback({
+      tone: "success",
+      message:
+        inviteStatusFor(employee) === "invited"
+          ? `Pending invitation updated to ${email}. Select Resend invite to email a fresh link.`
+          : `Updated ${name}.`,
+    });
     cancelEditEmployee();
+  }
+
+  async function resendEmployeeInvite(employee: Employee) {
+    if (inviteStatusFor(employee) !== "invited" || resendingInviteId) return;
+
+    setResendingInviteId(employee.id);
+    setInviteActionFeedback(null);
+    try {
+      const response = await fetch("/api/invites", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: employee.email,
+          name: employee.name,
+          storeId: store.id,
+        }),
+      });
+      const result = (await response.json()) as {
+        notification?: { status: NotificationEntry["status"]; reason?: string | null };
+        error?: string;
+      };
+      if (!response.ok || !result.notification) {
+        throw new Error(result.error ?? "Unable to resend the invitation.");
+      }
+      const notification = result.notification;
+
+      setNotifications((current) => [
+        {
+          id: `note_invite_resent_${Date.now()}`,
+          userId: employee.id,
+          type: "employee_invited",
+          subject: "You've been invited to The Schedule",
+          status: notification.status,
+          createdAt: new Date().toISOString(),
+        },
+        ...current,
+      ]);
+      addAudit(
+        "employee_invite_resent",
+        "User",
+        employee.id,
+        `Resent the employee invitation to ${employee.email}.`,
+      );
+      setInviteActionFeedback({
+        tone: notification.status === "failed" ? "error" : "success",
+        message:
+          notification.status === "failed"
+            ? `The fresh invitation was created, but email delivery failed${notification.reason ? `: ${notification.reason}` : "."}`
+            : `A fresh invitation link was ${notification.status} to ${employee.email}.`,
+      });
+    } catch (error) {
+      setInviteActionFeedback({
+        tone: "error",
+        message: error instanceof Error ? error.message : "Unable to resend the invitation.",
+      });
+    } finally {
+      setResendingInviteId(null);
+    }
   }
 
   function addEmployee() {
@@ -2999,6 +3110,18 @@ export function TheScheduleApp({
 
         {activeTab === "employees" && mode === "manager" && (
           <Section title="Employees" icon={<Users size={18} />}>
+            {inviteActionFeedback && (
+              <div
+                className={cx(
+                  "mb-4 rounded-lg border p-3 text-sm font-semibold",
+                  inviteActionFeedback.tone === "success"
+                    ? "border-approve/30 bg-approve/10 text-approve"
+                    : "border-warn/40 bg-warn/10 text-warn",
+                )}
+              >
+                {inviteActionFeedback.message}
+              </div>
+            )}
             <div className="mb-4 grid gap-3 rounded-lg border border-line p-4 lg:grid-cols-[1fr_1fr_1.4fr_auto]">
               <Field label="First name">
                 <input className={inputBase} value={newEmployee.firstName} onChange={(event) => setNewEmployee({ ...newEmployee, firstName: event.target.value })} />
@@ -3067,9 +3190,12 @@ export function TheScheduleApp({
                           <div className="flex justify-end gap-2">
                             {isEditing ? (
                               <>
-                                <Button onClick={() => saveEmployeeEdit(employee.id)}>
+                                <Button
+                                  onClick={() => void saveEmployeeEdit(employee.id)}
+                                  disabled={savingEmployeeId === employee.id}
+                                >
                                   <Check size={16} />
-                                  Save
+                                  {savingEmployeeId === employee.id ? "Saving" : "Save"}
                                 </Button>
                                 <Button variant="secondary" onClick={cancelEditEmployee}>
                                   <X size={16} />
@@ -3077,10 +3203,22 @@ export function TheScheduleApp({
                                 </Button>
                               </>
                             ) : (
-                              <Button variant="secondary" onClick={() => beginEditEmployee(employee)}>
-                                <Settings size={16} />
-                                Edit
-                              </Button>
+                              <>
+                                {status === "invited" && (
+                                  <Button
+                                    variant="secondary"
+                                    onClick={() => void resendEmployeeInvite(employee)}
+                                    disabled={resendingInviteId !== null}
+                                  >
+                                    <RefreshCw size={16} />
+                                    {resendingInviteId === employee.id ? "Resending" : "Resend invite"}
+                                  </Button>
+                                )}
+                                <Button variant="secondary" onClick={() => beginEditEmployee(employee)}>
+                                  <Settings size={16} />
+                                  Edit
+                                </Button>
+                              </>
                             )}
                           </div>
                         </td>

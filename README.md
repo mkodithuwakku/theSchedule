@@ -12,7 +12,7 @@ The app is based on the uploaded Store Scheduler SRS and includes:
 
 - Google/Auth.js-ready approved Gmail access control
 - Prisma PostgreSQL schema for users, stores, memberships, periods, availability, shifts, coverage, swaps, snapshots, notifications, and audit logs
-- Database-backed employee invitation records and invite acceptance route for hosted UAT
+- Database-backed employee invitations with manager correction, resend, and invite acceptance controls for hosted UAT
 - Neon-backed shared workspace state for hosted manager and employee use
 - Bounded daily schedule protection in Neon: one verified snapshot per store, overwritten daily, with manager backup-now and guarded restore controls
 - Men Are From Mars default store hours and shift templates
@@ -20,12 +20,12 @@ The app is based on the uploaded Store Scheduler SRS and includes:
 - Documented future path for multi-store expansion with store-specific branding, employees, schedules, and themes
 - Manager dashboard, employee management, availability tracker, schedule builder, coverage/swap approvals, hours report, CSV export, print view, and settings
 - Employee dashboard, availability submission, my shifts, full team schedule, coverage offers, and swap requests
-- Guided click-by-click full schedule run plus 117 advanced production flows, with saved results, search/filtering, and CSV/JSON export
+- Guided click-by-click full schedule run plus 119 advanced production flows, with saved results, search/filtering, and CSV/JSON export
 - Manager-controlled day progression that archives a published schedule, opens the next period, advances a shared simulated date, and triggers real reminder/publication email paths
 - Manager-only clean-run reset that clears UAT data, OAuth links, sessions, and notification deduplication while leaving two accounts for fresh email invitation testing
 - Development-only scenario presets for quickly loading common workflow states
 - UAT issue tracker with status toggles and CSV/JSON export
-- Live employee invitation emails with Google-account-matched acceptance
+- Live employee invitation emails with manager correction/resend and Google-account-matched acceptance
 - Manager notification preview center for invite, availability, publishing, coverage, swap, and approval emails
 - Availability conflict checks using full-day, shift-template, and custom-time overlap rules
 - Initial published hours versus final worked hours reporting
@@ -82,7 +82,7 @@ In the manager builder, click a shift to open the assignment panel and use `Unas
 Coverage requests and shift swaps are included in the saved test state, so they survive refreshes and can be tested across manager/employee role switches.
 The manager `Test Plan` tab starts with a guided full schedule run. It walks the manager through the normal business journey in order: initial manager/employee sign-in, live invitations for two more employees, every normal availability style, draft generation and editing, publish review, employee schedule review, coverage, swaps, reports, issue handling, backup, and sign-out. Each step includes the exact account, clicks, expected result, and a saved Not run/Passed/Failed/Blocked result. The same result also updates the matching advanced test.
 
-Below the guided run are 117 advanced production flows across release configuration, authentication, invitations, availability, schedule building, publishing, coverage, swaps, reports, persistence, backups, recurring schedule cycles, authorization failures, and reset behavior. Use these after the normal journey for edge cases and failure paths; results persist in Neon and can be exported as CSV or JSON.
+Below the guided run are 119 advanced production flows across release configuration, authentication, invitations, availability, schedule building, publishing, coverage, swaps, reports, persistence, backups, recurring schedule cycles, authorization failures, and reset behavior. Use these after the normal journey for edge cases and failure paths; results persist in Neon and can be exported as CSV or JSON.
 
 After publishing the first schedule, open `Test Plan` → `Day Progression & Next Schedule Test`. `Start next schedule cycle` refreshes the protected backup, moves the published period into bounded six-cycle history, and opens the next semi-monthly draft: days 1-14 or day 15 through month-end. Use `Advance 1 day` to walk through the period or `Jump to reminder email day` to execute the same deduplicated reminder delivery used by the daily Vercel job. Collect availability and publish normally to verify the next consolidated schedule emails, then select `Start following cycle` to repeat.
 When a new end-to-end run must begin from first login, use `Test Plan` → `Clean production UAT run`. Type `RESET CLEAN RUN` and confirm. This deliberately signs out every store test account, removes their Google account links, and clears UAT workspace/normalized schedule/invite/notification/audit data. The manager and UAlberta employee start active; Hockey and Bobby start inactive and outside the directory so their real invitation emails and acceptance can be tested. For the September 2026 rollout, the clean baseline opens availability on September 5, closes it on September 10, has a September 12 release due date, and covers September 15-30. A per-run identifier prevents an old browser tab from writing stale state back after the reset.

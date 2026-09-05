@@ -24,6 +24,8 @@ The browser interface is the supported client. This reference is for maintenance
 | `PUT /api/test-state` | Active member | Save manager state or a server-filtered employee change |
 | `DELETE /api/test-state` | Manager | Reset only the workspace to default state after making a protected backup |
 | `POST /api/invites` | Manager | Create a 14-day employee invitation, send email, and log it |
+| `PATCH /api/invites` | Manager | Correct the name or email on a pending invitation |
+| `PUT /api/invites` | Manager | Replace a pending token, renew its 14-day expiry, resend, and log delivery |
 | `GET /api/invites/accept?token=…` | Invited Google identity | Redirect through sign-in if needed, then activate matching membership |
 | `POST /api/schedule/publish` | Manager | Publish active shifts, audit, email members, and return final workspace |
 | `POST /api/notifications/test-email` | Active member with restrictions | Send/log workflow email; arbitrary recipient and most types are manager-only |
@@ -66,6 +68,14 @@ Example request shape:
 ```
 
 The route normalizes the email, verifies manager access to the store, upserts an active employee user, creates a random invitation token expiring in 14 days, sends the invitation, and creates a `NotificationLog` row. The emailed action opens the normal application sign-in page with a same-origin acceptance callback, which is more reliable from mobile email clients; after Google sign-in, the callback continues to the acceptance route. The response contains invitation metadata and provider status. Do not expose the returned `inviteUrl` in logs or public documentation because it is an access token.
+
+### `PATCH /api/invites`
+
+Managers can update a pending invitation by sending `currentEmail`, corrected `email`, `name`, and `storeId`. Accepted invitations cannot be edited through this route. The route rejects an email already invited or active in the same store, updates the pending invitation and safe pre-acceptance user record together, and writes an audit row. It does not send an email; use the resend action after correcting an address.
+
+### `PUT /api/invites`
+
+Managers can resend a pending invitation by sending its `email`, employee `name`, and `storeId`. The route replaces the token so older links stop working, renews the expiry for 14 days, sends the standard invitation email, and records both notification delivery and an audit row. Accepted invitations cannot be resent.
 
 ### `GET /api/invites/accept`
 

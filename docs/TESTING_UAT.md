@@ -60,7 +60,7 @@ After a clean production reset, only the manager and Employee A remain active. E
 8. After the normal journey passes, continue through the `Advanced Production UAT` groups.
 9. Export results as CSV or JSON at the end of the session.
 
-The guided run contains 49 normal-business steps. The advanced catalog contains 117 tests covering release configuration, authentication, invitations, employee experience, availability, builder behavior, publication, requests, reports, persistence, backups, recurring cycles, authorization failures, provider failure behavior, and reset behavior.
+The guided run contains 51 normal-business steps. The advanced catalog contains 119 tests covering release configuration, authentication, invitations, employee experience, availability, builder behavior, publication, requests, reports, persistence, backups, recurring cycles, authorization failures, provider failure behavior, and reset behavior.
 
 ## Guided normal production journey
 

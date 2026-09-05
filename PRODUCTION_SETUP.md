@@ -101,7 +101,7 @@ Changing a person's access is a database operation on `StoreMembership.role` and
 
 Use the manager `Test Plan` tab as the source of truth. Start with `Guided Full Schedule Run`, which gives the exact account, clicks, and pass condition for the ordinary end-to-end schedule cycle: sign-in, invitation, availability, generation, editing, publication, employee review, coverage, swaps, reports, issue tracking, and backup. Use four separate browser profiles. The manager and UAlberta employee start active; Hockey and Bobby become active only after accepting the manager's live email invitations. Guided results persist through Neon and also mark their matching advanced tests.
 
-After the guided run, use the 117-test advanced checklist for signed-out/unauthorized paths, invite token edge cases, input validation, publish retries, approval/rejection alternatives, exports, concurrency, daily/manual backup and restore, recurring schedule cycles, provider failures, and reset verification. Results can be exported to CSV or JSON.
+After the guided run, use the 119-test advanced checklist for signed-out/unauthorized paths, invite correction/resend, invite token edge cases, input validation, publish retries, approval/rejection alternatives, exports, concurrency, daily/manual backup and restore, recurring schedule cycles, provider failures, and reset verification. Results can be exported to CSV or JSON.
 
 ### Day progression and recurring schedule email test
 

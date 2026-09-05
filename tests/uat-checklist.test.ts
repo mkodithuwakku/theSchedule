@@ -24,6 +24,8 @@ test("production UAT checklist is extensive and has unique stable IDs", () => {
   assert(UAT_CHECKLIST_ITEMS.every((item) => item.steps.length > 0 && item.expected.trim().length > 0));
   assert(UAT_CHECKLIST_ITEMS.some((item) => item.critical));
   assert(UAT_CHECKLIST_ITEMS.some((item) => item.cleanRunRecommended));
+  assert(ids.includes("invite-edit-pending"));
+  assert(ids.includes("invite-resend"));
 });
 
 test("checklist progress accepts only known test IDs and statuses", () => {

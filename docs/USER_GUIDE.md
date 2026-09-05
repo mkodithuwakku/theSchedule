@@ -82,6 +82,8 @@ The employee's signed-in Google email is their identity. Avoid changing it unles
 
 The link expires after 14 days and may only be accepted once. The employee must choose the same Google email that received the invitation.
 
+If an invited email is incorrect, select `Edit`, correct the address, and save while the person still shows `Invited`. Then select `Resend invite`. The app replaces the old token, renews the invitation for 14 days, sends the corrected address a fresh email, and records the attempt in Notifications. Once the employee is active, the pending-invitation edit and resend actions are no longer available.
+
 After a clean production UAT reset, use this flow to invite `m.kodithuwakku.hockey@gmail.com` and `bobby.cazby@gmail.com`. The manager and `kodithuw@ualberta.ca` remain the two initially active accounts.
 
 ### Accept an invitation as the employee

@@ -137,12 +137,36 @@ export const GUIDED_UAT_PHASES: GuidedUatPhase[] = [
         actor: "Manager",
         instructions: [
           "On Employees, invite M. Kodithuwakku Hockey using m.kodithuwakku.hockey@gmail.com.",
-          "Invite Bobby Cazby using bobby.cazby@gmail.com.",
+          "Invite Bobby Cazby using bobbycazby@gmail.com to reproduce a correctable manager typo.",
           "Confirm both people appear as invited and both invitation notifications show Sent.",
           "Open both inboxes and confirm each received its own invitation email."
         ],
         expected: "Two valid Google emails create two pending employees, two invitations, and two delivered invitation emails.",
         target: { mode: "manager", tab: "employees", label: "Open Employees" }
+      },
+      {
+        id: "invite-edit-pending",
+        title: "Correct Employee C's pending invitation",
+        actor: "Manager",
+        instructions: [
+          "On Employees, select Edit beside Bobby Cazby.",
+          "Change the approved Gmail from bobbycazby@gmail.com to bobby.cazby@gmail.com.",
+          "Select Save and confirm Bobby remains Invited with the corrected address."
+        ],
+        expected: "The directory and pending server invitation both use bobby.cazby@gmail.com without creating a duplicate employee.",
+        target: { mode: "manager", tab: "employees", label: "Review Employees" }
+      },
+      {
+        id: "invite-resend",
+        title: "Resend Employee C's corrected invitation",
+        actor: "Manager",
+        instructions: [
+          "Select Resend invite beside Bobby Cazby.",
+          "Confirm the success message says the fresh link was sent to bobby.cazby@gmail.com.",
+          "Open Bobby's newest invitation email and use only that link for acceptance."
+        ],
+        expected: "The corrected address receives a newly issued 14-day invitation and the resend appears in Notifications.",
+        target: { mode: "manager", tab: "employees", label: "Review Employees" }
       },
       {
         id: "invite-signed-out-link",

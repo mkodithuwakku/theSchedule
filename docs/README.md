@@ -64,7 +64,7 @@ The active build intentionally supports one store. The Prisma model is store-awa
 - Hosting: Vercel.
 - Store timezone: `America/Edmonton`.
 - Daily Vercel job: `16:00 UTC` (`10:00 MDT` or `09:00 MST`, depending on daylight saving time).
-- Guided normal journey: 48 saved steps.
-- Advanced UAT catalog: 117 saved tests.
+- Guided normal journey: 51 saved steps.
+- Advanced UAT catalog: 119 saved tests.
 - Schedule history retained in the UAT workspace: six published periods.
 - Protected backup retention: exactly one overwritten workspace backup row per store.
