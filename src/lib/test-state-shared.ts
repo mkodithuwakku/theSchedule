@@ -11,7 +11,7 @@ import type {
 } from "@/lib/demo-data";
 import type { UatCheckStatus } from "@/lib/uat-checklist";
 
-export const TEST_TODAY = "July 6, 2026";
+export const TEST_TODAY = "September 5, 2026";
 export const STORAGE_KEY = "the-schedule-test-state-v1";
 export const DEFAULT_UAT_RUN_ID = "uat_initial";
 

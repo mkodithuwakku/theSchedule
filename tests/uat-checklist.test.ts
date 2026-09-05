@@ -77,14 +77,15 @@ test("a clean run keeps its unique identifier through state normalization", () =
   assert.equal(normalizeTestState(cleanRun).uatRunId, "uat_new_run");
 });
 
-test("a clean production run opens a future Edmonton schedule window", () => {
+test("a clean production run uses the September rollout schedule window", () => {
   const cleanRun = createCleanRunTestState("uat_new_run", new Date("2026-08-17T18:00:00.000Z"));
 
-  assert.equal(cleanRun.period.availabilityOpenAt, "2026-08-17");
-  assert.equal(cleanRun.period.availabilityDeadlineAt, "2026-08-22");
-  assert.equal(cleanRun.period.releaseDate, "2026-08-24");
-  assert.equal(cleanRun.period.startDate, "2026-08-25");
-  assert.equal(cleanRun.period.endDate, "2026-09-10");
+  assert.equal(cleanRun.period.name, "September 15-30, 2026");
+  assert.equal(cleanRun.period.availabilityOpenAt, "2026-09-05");
+  assert.equal(cleanRun.period.availabilityDeadlineAt, "2026-09-10");
+  assert.equal(cleanRun.period.releaseDate, "2026-09-12");
+  assert.equal(cleanRun.period.startDate, "2026-09-15");
+  assert.equal(cleanRun.period.endDate, "2026-09-30");
   assert(cleanRun.shifts.length > 0);
   assert(cleanRun.shifts.every((shift) => shift.schedulePeriodId === cleanRun.period.id));
 });

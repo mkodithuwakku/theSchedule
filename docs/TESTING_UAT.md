@@ -261,7 +261,7 @@ Reset:
 8. Confirm Hockey and Bobby cannot access the schedule before invitation.
 9. Invite Hockey and Bobby, accept both emailed links with their matching Google accounts, and confirm both become active.
 10. Confirm first-login linking works and no old checklist, schedule, request, invitation, session, or notification state returns.
-11. Confirm four active people and a date-relative availability period exist after acceptance.
+11. Confirm four active people and the September 15-30 schedule period exist after acceptance, with release due September 12.
 12. Try refreshing an old pre-reset tab; it must not restore stale data.
 
 The reset preserves store configuration and recreates the seeded access baseline. It clears workspace/checklist data, invitations, normalized schedule data, notification claims/logs, audit data, OAuth accounts, and sessions. A protected `pre_reset` backup is made first, but do not use reset as a routine way to start a new schedule cycle.

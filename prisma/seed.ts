@@ -96,16 +96,24 @@ async function main() {
   const manager = users[0];
   const period = await prisma.schedulePeriod.upsert({
     where: { id: "period_next" },
-    update: {},
+    update: {
+      name: "September 15-30, 2026",
+      startDate: new Date("2026-09-15T12:00:00.000Z"),
+      endDate: new Date("2026-09-30T12:00:00.000Z"),
+      releaseDate: new Date("2026-09-12T12:00:00.000Z"),
+      availabilityOpenAt: new Date("2026-09-05T12:00:00.000Z"),
+      availabilityDeadlineAt: new Date("2026-09-10T23:59:00.000Z"),
+      status: ScheduleStatus.draft
+    },
     create: {
       id: "period_next",
       storeId: store.id,
-      name: "July 15-31, 2026",
-      startDate: new Date("2026-07-15T06:00:00.000Z"),
-      endDate: new Date("2026-07-31T06:00:00.000Z"),
-      releaseDate: new Date("2026-07-14T16:00:00.000Z"),
-      availabilityOpenAt: new Date("2026-07-06T16:00:00.000Z"),
-      availabilityDeadlineAt: new Date("2026-07-12T23:59:00.000Z"),
+      name: "September 15-30, 2026",
+      startDate: new Date("2026-09-15T12:00:00.000Z"),
+      endDate: new Date("2026-09-30T12:00:00.000Z"),
+      releaseDate: new Date("2026-09-12T12:00:00.000Z"),
+      availabilityOpenAt: new Date("2026-09-05T12:00:00.000Z"),
+      availabilityDeadlineAt: new Date("2026-09-10T23:59:00.000Z"),
       status: ScheduleStatus.draft,
       createdById: manager.id
     }

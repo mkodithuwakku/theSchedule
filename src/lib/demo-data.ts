@@ -184,13 +184,13 @@ export const shiftTemplates: ShiftTemplate[] = [
 ];
 
 export const schedulePeriod: SchedulePeriod = {
-  id: "period_july_15_31",
-  name: "July 15-31, 2026",
-  startDate: "2026-07-15",
-  endDate: "2026-07-31",
-  releaseDate: "2026-07-14",
-  availabilityOpenAt: "2026-07-06",
-  availabilityDeadlineAt: "2026-07-12",
+  id: "period_sep_15_30_2026",
+  name: "September 15-30, 2026",
+  startDate: "2026-09-15",
+  endDate: "2026-09-30",
+  releaseDate: "2026-09-12",
+  availabilityOpenAt: "2026-09-05",
+  availabilityDeadlineAt: "2026-09-10",
   status: "draft"
 };
 
@@ -199,13 +199,13 @@ export const availabilitySubmissions: AvailabilitySubmission[] = [
     id: "av_ualberta",
     schedulePeriodId: schedulePeriod.id,
     userId: "emp_ualberta",
-    submittedAt: "2026-07-10T17:20:00.000Z",
+    submittedAt: "2026-09-09T17:20:00.000Z",
     note: "Class before lunch.",
     unavailable: [
       {
         id: "u_ualberta_17",
         userId: "emp_ualberta",
-        date: "2026-07-17",
+        date: "2026-09-17",
         unavailableType: "custom_time_range",
         allDay: false,
         startTime: "09:00",
@@ -218,13 +218,13 @@ export const availabilitySubmissions: AvailabilitySubmission[] = [
     id: "av_hockey",
     schedulePeriodId: schedulePeriod.id,
     userId: "emp_hockey",
-    submittedAt: "2026-07-10T21:03:00.000Z",
+    submittedAt: "2026-09-09T21:03:00.000Z",
     note: "Away on the weekend.",
     unavailable: [
       {
         id: "u_hockey_18",
         userId: "emp_hockey",
-        date: "2026-07-18",
+        date: "2026-09-19",
         unavailableType: "full_day",
         allDay: true,
         note: "Family event"
@@ -232,7 +232,7 @@ export const availabilitySubmissions: AvailabilitySubmission[] = [
       {
         id: "u_hockey_19",
         userId: "emp_hockey",
-        date: "2026-07-19",
+        date: "2026-09-20",
         unavailableType: "full_day",
         allDay: true,
         note: "Family event"
@@ -243,13 +243,13 @@ export const availabilitySubmissions: AvailabilitySubmission[] = [
     id: "av_bobby",
     schedulePeriodId: schedulePeriod.id,
     userId: "emp_bobby",
-    submittedAt: "2026-07-11T15:40:00.000Z",
+    submittedAt: "2026-09-10T15:40:00.000Z",
     note: "Can close most nights.",
     unavailable: [
       {
         id: "u_bobby_21",
         userId: "emp_bobby",
-        date: "2026-07-21",
+        date: "2026-09-22",
         unavailableType: "shift_template",
         allDay: false,
         shiftTemplateId: "tpl_weekday_open",
@@ -262,17 +262,17 @@ export const availabilitySubmissions: AvailabilitySubmission[] = [
 ];
 
 export const initialShifts: Shift[] = [
-  { id: "shift_1", schedulePeriodId: schedulePeriod.id, date: "2026-07-15", startTime: "09:45", endTime: "15:45", employeeId: "emp_manager", originalEmployeeId: "emp_manager", originalStartTime: "09:45", originalEndTime: "15:45" },
-  { id: "shift_2", schedulePeriodId: schedulePeriod.id, date: "2026-07-15", startTime: "15:15", endTime: "21:15", employeeId: "emp_bobby", originalEmployeeId: "emp_bobby", originalStartTime: "15:15", originalEndTime: "21:15" },
-  { id: "shift_3", schedulePeriodId: schedulePeriod.id, date: "2026-07-16", startTime: "09:45", endTime: "15:45", employeeId: "emp_ualberta", originalEmployeeId: "emp_ualberta", originalStartTime: "09:45", originalEndTime: "15:45" },
-  { id: "shift_4", schedulePeriodId: schedulePeriod.id, date: "2026-07-16", startTime: "15:15", endTime: "21:15", employeeId: "emp_hockey", originalEmployeeId: "emp_hockey", originalStartTime: "15:15", originalEndTime: "21:15" },
-  { id: "shift_5", schedulePeriodId: schedulePeriod.id, date: "2026-07-17", startTime: "09:45", endTime: "15:45", employeeId: "emp_bobby", originalEmployeeId: "emp_bobby", originalStartTime: "09:45", originalEndTime: "15:45" },
-  { id: "shift_6", schedulePeriodId: schedulePeriod.id, date: "2026-07-17", startTime: "15:15", endTime: "21:15", employeeId: "emp_manager", originalEmployeeId: "emp_manager", originalStartTime: "15:15", originalEndTime: "21:15" },
-  { id: "shift_7", schedulePeriodId: schedulePeriod.id, date: "2026-07-18", startTime: "09:45", endTime: "15:45", employeeId: "emp_ualberta", originalEmployeeId: "emp_ualberta", originalStartTime: "09:45", originalEndTime: "15:45" },
-  { id: "shift_8", schedulePeriodId: schedulePeriod.id, date: "2026-07-18", startTime: "12:00", endTime: "18:00", employeeId: "emp_hockey", originalEmployeeId: "emp_hockey", originalStartTime: "12:00", originalEndTime: "18:00" },
-  { id: "shift_9", schedulePeriodId: schedulePeriod.id, date: "2026-07-18", startTime: "15:15", endTime: "21:15", employeeId: "emp_bobby", originalEmployeeId: "emp_bobby", originalStartTime: "15:15", originalEndTime: "21:15" },
-  { id: "shift_10", schedulePeriodId: schedulePeriod.id, date: "2026-07-19", startTime: "10:45", endTime: "14:45", employeeId: "emp_manager", originalEmployeeId: "emp_manager", originalStartTime: "10:45", originalEndTime: "14:45" },
-  { id: "shift_11", schedulePeriodId: schedulePeriod.id, date: "2026-07-19", startTime: "14:15", endTime: "18:15", employeeId: "emp_ualberta", originalEmployeeId: "emp_ualberta", originalStartTime: "14:15", originalEndTime: "18:15" }
+  { id: "shift_1", schedulePeriodId: schedulePeriod.id, date: "2026-09-15", startTime: "09:45", endTime: "15:45", employeeId: "emp_manager", originalEmployeeId: "emp_manager", originalStartTime: "09:45", originalEndTime: "15:45" },
+  { id: "shift_2", schedulePeriodId: schedulePeriod.id, date: "2026-09-15", startTime: "15:15", endTime: "21:15", employeeId: "emp_bobby", originalEmployeeId: "emp_bobby", originalStartTime: "15:15", originalEndTime: "21:15" },
+  { id: "shift_3", schedulePeriodId: schedulePeriod.id, date: "2026-09-16", startTime: "09:45", endTime: "15:45", employeeId: "emp_ualberta", originalEmployeeId: "emp_ualberta", originalStartTime: "09:45", originalEndTime: "15:45" },
+  { id: "shift_4", schedulePeriodId: schedulePeriod.id, date: "2026-09-16", startTime: "15:15", endTime: "21:15", employeeId: "emp_hockey", originalEmployeeId: "emp_hockey", originalStartTime: "15:15", originalEndTime: "21:15" },
+  { id: "shift_5", schedulePeriodId: schedulePeriod.id, date: "2026-09-17", startTime: "09:45", endTime: "15:45", employeeId: "emp_bobby", originalEmployeeId: "emp_bobby", originalStartTime: "09:45", originalEndTime: "15:45" },
+  { id: "shift_6", schedulePeriodId: schedulePeriod.id, date: "2026-09-17", startTime: "15:15", endTime: "21:15", employeeId: "emp_manager", originalEmployeeId: "emp_manager", originalStartTime: "15:15", originalEndTime: "21:15" },
+  { id: "shift_7", schedulePeriodId: schedulePeriod.id, date: "2026-09-19", startTime: "09:45", endTime: "15:45", employeeId: "emp_ualberta", originalEmployeeId: "emp_ualberta", originalStartTime: "09:45", originalEndTime: "15:45" },
+  { id: "shift_8", schedulePeriodId: schedulePeriod.id, date: "2026-09-19", startTime: "12:00", endTime: "18:00", employeeId: "emp_hockey", originalEmployeeId: "emp_hockey", originalStartTime: "12:00", originalEndTime: "18:00" },
+  { id: "shift_9", schedulePeriodId: schedulePeriod.id, date: "2026-09-19", startTime: "15:15", endTime: "21:15", employeeId: "emp_bobby", originalEmployeeId: "emp_bobby", originalStartTime: "15:15", originalEndTime: "21:15" },
+  { id: "shift_10", schedulePeriodId: schedulePeriod.id, date: "2026-09-20", startTime: "10:45", endTime: "14:45", employeeId: "emp_manager", originalEmployeeId: "emp_manager", originalStartTime: "10:45", originalEndTime: "14:45" },
+  { id: "shift_11", schedulePeriodId: schedulePeriod.id, date: "2026-09-20", startTime: "14:15", endTime: "18:15", employeeId: "emp_ualberta", originalEmployeeId: "emp_ualberta", originalStartTime: "14:15", originalEndTime: "18:15" }
 ];
 
 export const coverageRequests: CoverageRequest[] = [
@@ -305,7 +305,7 @@ export const initialAuditLog: AuditEntry[] = [
     entityType: "SchedulePeriod",
     entityId: schedulePeriod.id,
     summary: "Generated draft period from Men Are From Mars defaults.",
-    createdAt: "2026-07-06T19:10:00.000Z"
+    createdAt: "2026-09-05T19:10:00.000Z"
   }
 ];
 
@@ -316,7 +316,7 @@ export const initialNotifications: NotificationEntry[] = [
     type: "coverage_opened",
     subject: "A shift is open for coverage",
     status: "queued",
-    createdAt: "2026-07-06T19:15:00.000Z"
+    createdAt: "2026-09-05T19:15:00.000Z"
   }
 ];
 

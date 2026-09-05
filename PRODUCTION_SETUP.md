@@ -136,7 +136,7 @@ Only an active manager can perform the full reset:
 3. Type `RESET CLEAN RUN` exactly.
 4. Confirm the browser warning.
 5. The reset clears workspace/checklist state, invitations, normalized schedules, notification deduplication and logs, audit logs, Auth.js Google account links, and active sessions.
-6. The store configuration and four test identities remain, but only the manager and UAlberta memberships start active. Hockey and Bobby are removed from the directory and must be invited again. A new date-relative period opens availability immediately, closes it after five Edmonton calendar days, releases after seven days, and starts the schedule the following day.
+6. The store configuration and four test identities remain, but only the manager and UAlberta memberships start active. Hockey and Bobby are removed from the directory and must be invited again. For the September 2026 rollout, the clean period opens availability September 5, closes it September 10, is due for release September 12, and covers September 15-30.
 7. Every browser is signed out. Sign in as the manager and UAlberta employee, then invite and accept Hockey and Bobby before continuing.
 
 The reset is protected by server-side manager authorization and an exact confirmation phrase. Each run has a unique identifier, so an old tab from a previous run receives a conflict instead of restoring stale data.

@@ -158,7 +158,7 @@ Request:
 }
 ```
 
-This manager-only action backs up the workspace, clears UAT and normalized scheduling artifacts, removes Auth.js accounts and sessions, and creates a current date-relative period with a new run ID. The manager and UAlberta employee memberships start active. Hockey, Bobby, and orphaned extra test invitees are removed from Neon so the manager can test user creation, invitation email delivery, and acceptance from zero. Users with another store membership are preserved. Every open browser must sign in again.
+This manager-only action backs up the workspace, clears UAT and normalized scheduling artifacts, removes Auth.js accounts and sessions, and creates the September 15-30, 2026 rollout period with a September 12 release date and a new run ID. The manager and UAlberta employee memberships start active. Hockey, Bobby, and orphaned extra test invitees are removed from Neon so the manager can test user creation, invitation email delivery, and acceptance from zero. Users with another store membership are preserved. Every open browser must sign in again.
 
 ## Scheduled rollout
 

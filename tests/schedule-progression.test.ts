@@ -28,11 +28,11 @@ test("next schedule period continues directly after the published period", () =>
   const current = publishedState().period;
   const next = createNextSchedulePeriod(current);
 
-  assert.equal(next.startDate, "2026-09-11");
-  assert.equal(next.endDate, "2026-09-27");
-  assert.equal(next.releaseDate, "2026-09-10");
-  assert.equal(next.availabilityDeadlineAt, "2026-09-08");
-  assert.equal(next.availabilityOpenAt, "2026-09-03");
+  assert.equal(next.startDate, "2026-10-01");
+  assert.equal(next.endDate, "2026-10-16");
+  assert.equal(next.releaseDate, "2026-09-30");
+  assert.equal(next.availabilityDeadlineAt, "2026-09-28");
+  assert.equal(next.availabilityOpenAt, "2026-09-23");
   assert.equal(next.status, "draft");
 });
 
@@ -59,8 +59,8 @@ test("simulated date advances forward and can jump to the reminder email day", (
   const reminderDate = nextReminderDate(cycle);
   const reminderDay = advanceScheduleTestDate(tomorrow, reminderDate);
 
-  assert.equal(tomorrow.dayProgression.currentDate, "2026-08-25");
-  assert.equal(reminderDate, "2026-09-07");
+  assert.equal(tomorrow.dayProgression.currentDate, "2026-09-13");
+  assert.equal(reminderDate, "2026-09-27");
   assert.equal(reminderDay.dayProgression.currentDate, reminderDate);
   assert.throws(() => advanceScheduleTestDate(reminderDay, reminderDate), /only move forward/);
 });

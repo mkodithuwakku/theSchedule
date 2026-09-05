@@ -2548,14 +2548,14 @@ export function TheScheduleApp({
             .map((employee) => ({
               id: `preset_acceptance_${employee.id}`,
               employeeId: employee.id,
-              acceptedAt: "2026-07-06T18:00:00.000Z",
+              acceptedAt: "2026-09-05T18:00:00.000Z",
               email: employee.email,
               name: employee.name
             }));
     const generatedDraft = autoAssignDraftShifts(defaultShiftBlocks, employees, presetAvailability);
     const nextPeriod =
       preset === "published"
-        ? { ...schedulePeriod, status: "published" as const, publishedAt: "2026-07-14T16:00:00.000Z" }
+        ? { ...schedulePeriod, status: "published" as const, publishedAt: "2026-09-12T16:00:00.000Z" }
         : { ...schedulePeriod, status: "draft" as const, publishedAt: undefined };
     const nextShifts =
       preset === "draft"

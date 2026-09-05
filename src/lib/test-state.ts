@@ -9,7 +9,6 @@ import {
   initialAuditLog,
   schedulePeriod
 } from "@/lib/demo-data";
-import { addIsoDays, dateInTimeZone } from "@/lib/schedule-rollout";
 import { DEFAULT_UAT_RUN_ID, TEST_TODAY, type StoredTestState } from "@/lib/test-state-shared";
 import { normalizeUatChecklistProgress } from "@/lib/uat-checklist";
 
@@ -82,30 +81,12 @@ export function createDefaultTestState(uatRunId = DEFAULT_UAT_RUN_ID): StoredTes
   };
 }
 
-function cleanRunPeriod(now: Date): SchedulePeriod {
-  const availabilityOpenAt = dateInTimeZone(now, "America/Edmonton");
-  const availabilityDeadlineAt = addIsoDays(availabilityOpenAt, 5);
-  const releaseDate = addIsoDays(availabilityOpenAt, 7);
-  const startDate = addIsoDays(releaseDate, 1);
-  const endDate = addIsoDays(startDate, 16);
-  const label = (value: string) =>
-    new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" })
-      .format(new Date(`${value}T12:00:00.000Z`));
-
-  return {
-    id: `period_${startDate.replaceAll("-", "")}_${endDate.replaceAll("-", "")}`,
-    name: `${label(startDate)} - ${label(endDate)}`,
-    startDate,
-    endDate,
-    releaseDate,
-    availabilityOpenAt,
-    availabilityDeadlineAt,
-    status: "draft"
-  };
+function cleanRunPeriod(): SchedulePeriod {
+  return clone(schedulePeriod);
 }
 
 export function createCleanRunTestState(uatRunId: string, now = new Date()): StoredTestState {
-  const period = cleanRunPeriod(now);
+  const period = cleanRunPeriod();
   const state = createDefaultTestState(uatRunId);
   return {
     ...state,
