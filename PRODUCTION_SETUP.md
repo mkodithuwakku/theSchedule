@@ -107,7 +107,7 @@ After the guided run, use the 117-test advanced checklist for signed-out/unautho
 
 1. Publish the first schedule through the normal Builder confirmation.
 2. Open `Test Plan` → `Day Progression & Next Schedule Test`.
-3. Select `Start next schedule cycle`. The app creates a manual protected backup, moves the publication into six-cycle bounded history, and opens the next draft period.
+3. Select `Start next schedule cycle`. The app creates a manual protected backup, moves the publication into six-cycle bounded history, and opens the next semi-monthly draft (days 1-14 or day 15 through month-end).
 4. Select `Advance 1 day` to inspect ordinary daily changes, or `Jump to reminder email day` to reach the exact release-minus-three-day milestone.
 5. Open `Notifications` and the four test inboxes. Confirm one availability reminder per active member; retrying the same period does not create duplicates.
 6. Submit availability for the new period, build it, and publish normally. Confirm a new consolidated schedule email reaches every active member.

@@ -23,7 +23,7 @@ The current product goal is hosted, authenticated UAT with Google identities and
 - `src/lib/test-state.ts` normalizes the JSON-backed test-state payload.
 - `src/lib/guided-uat.ts` defines the ordered, click-by-click normal schedule journey shown first in Test Plan, including progression into the next schedule.
 - `src/lib/uat-checklist.ts` defines the 117-flow advanced production UAT plan and validates persisted manual results; guided steps reuse matching advanced IDs.
-- `src/lib/schedule-progression.ts` creates consecutive schedule periods, advances the shared manager-controlled UAT date, and keeps bounded six-period publication history.
+- `src/lib/schedule-progression.ts` creates semi-monthly schedule periods (days 1-14, then day 15 through month-end), advances the shared manager-controlled UAT date, and keeps bounded six-period publication history.
 - `src/lib/uat-reset.ts` performs the manager-only clean-run reset, clears OAuth/session and UAT artifacts, starts two identities active, leaves Hockey/Bobby awaiting fresh invitations, and creates a new run identifier.
 - `src/lib/auth.ts` configures Google/Auth.js and permits verified Google identities to link to pre-seeded or invited user records on first login.
 - `src/lib/access.ts` resolves the signed-in Google account to an active Neon store membership.

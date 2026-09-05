@@ -5,12 +5,12 @@ import type { ArchivedSchedule, StoredTestState } from "@/lib/test-state-shared"
 
 export const MAX_SCHEDULE_HISTORY = 6;
 
-function isoDayNumber(value: string) {
-  return Math.floor(new Date(`${value}T12:00:00.000Z`).getTime() / 86_400_000);
-}
+function semiMonthlyPeriodEnd(startDate: string) {
+  const [year, month, day] = startDate.split("-").map(Number);
+  if (day <= 14) return `${startDate.slice(0, 8)}14`;
 
-function periodLengthInDays(period: SchedulePeriod) {
-  return Math.max(1, isoDayNumber(period.endDate) - isoDayNumber(period.startDate) + 1);
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return `${startDate.slice(0, 8)}${String(lastDay).padStart(2, "0")}`;
 }
 
 function periodLabel(startDate: string, endDate: string) {
@@ -25,7 +25,7 @@ function periodLabel(startDate: string, endDate: string) {
 
 export function createNextSchedulePeriod(current: SchedulePeriod): SchedulePeriod {
   const startDate = addIsoDays(current.endDate, 1);
-  const endDate = addIsoDays(startDate, periodLengthInDays(current) - 1);
+  const endDate = semiMonthlyPeriodEnd(startDate);
   const releaseDate = addIsoDays(startDate, -1);
   const availabilityDeadlineAt = addIsoDays(releaseDate, -2);
   const availabilityOpenAt = addIsoDays(availabilityDeadlineAt, -5);

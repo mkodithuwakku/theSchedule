@@ -129,7 +129,8 @@ export const store = {
   timezone: "America/Edmonton",
   availabilityOpenDays: 5,
   availabilityDeadlineDays: 2,
-  releaseDays: [14, 31]
+  scheduleCadence: "semi_monthly" as const,
+  releaseDays: [14, "month_end"] as const
 };
 
 export const employees: Employee[] = [

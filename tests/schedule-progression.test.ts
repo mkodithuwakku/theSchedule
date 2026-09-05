@@ -11,34 +11,67 @@ import { createCleanRunTestState } from "@/lib/test-state";
 
 function publishedState() {
   const state = createCleanRunTestState("progression_run", new Date("2026-08-17T18:00:00.000Z"));
-  state.period = { ...state.period, status: "published", publishedAt: "2026-08-24T16:00:00.000Z" };
+  state.period = { ...state.period, status: "published", publishedAt: "2026-09-12T16:00:00.000Z" };
   state.availability = [
     {
       id: "availability_manager",
       schedulePeriodId: state.period.id,
       userId: "emp_manager",
-      submittedAt: "2026-08-20T16:00:00.000Z",
+      submittedAt: "2026-09-09T16:00:00.000Z",
       unavailable: []
     }
   ];
   return state;
 }
 
-test("next schedule period continues directly after the published period", () => {
+test("next schedule period opens the first half of October", () => {
   const current = publishedState().period;
   const next = createNextSchedulePeriod(current);
 
   assert.equal(next.startDate, "2026-10-01");
-  assert.equal(next.endDate, "2026-10-16");
+  assert.equal(next.endDate, "2026-10-14");
   assert.equal(next.releaseDate, "2026-09-30");
   assert.equal(next.availabilityDeadlineAt, "2026-09-28");
   assert.equal(next.availabilityOpenAt, "2026-09-23");
   assert.equal(next.status, "draft");
 });
 
+test("semi-monthly progression alternates between days 1-14 and day 15 through month-end", () => {
+  const octoberFirstHalf = createNextSchedulePeriod(publishedState().period);
+  const octoberSecondHalf = createNextSchedulePeriod(octoberFirstHalf);
+  const novemberFirstHalf = createNextSchedulePeriod(octoberSecondHalf);
+
+  assert.deepEqual(
+    [octoberFirstHalf.startDate, octoberFirstHalf.endDate],
+    ["2026-10-01", "2026-10-14"]
+  );
+  assert.deepEqual(
+    [octoberSecondHalf.startDate, octoberSecondHalf.endDate],
+    ["2026-10-15", "2026-10-31"]
+  );
+  assert.deepEqual(
+    [novemberFirstHalf.startDate, novemberFirstHalf.endDate],
+    ["2026-11-01", "2026-11-14"]
+  );
+});
+
+test("semi-monthly progression respects February and leap years", () => {
+  const commonFebruary = createNextSchedulePeriod({
+    ...publishedState().period,
+    endDate: "2027-02-14"
+  });
+  const leapFebruary = createNextSchedulePeriod({
+    ...publishedState().period,
+    endDate: "2028-02-14"
+  });
+
+  assert.deepEqual([commonFebruary.startDate, commonFebruary.endDate], ["2027-02-15", "2027-02-28"]);
+  assert.deepEqual([leapFebruary.startDate, leapFebruary.endDate], ["2028-02-15", "2028-02-29"]);
+});
+
 test("starting a new cycle archives the publication and clears period-specific work", () => {
   const original = publishedState();
-  const next = beginNextScheduleCycle(original, "2026-08-24T18:00:00.000Z");
+  const next = beginNextScheduleCycle(original, "2026-09-12T18:00:00.000Z");
 
   assert.equal(next.dayProgression.enabled, true);
   assert.equal(next.dayProgression.currentDate, original.period.releaseDate);

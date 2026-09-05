@@ -169,7 +169,7 @@ Run this only after the first schedule is successfully published. It uses a shar
 3. Record the active published period and current backup time.
 4. Select `Start next schedule cycle`.
 5. Confirm the prior schedule appears in schedule history.
-6. Confirm a consecutive new period is `Draft` and the shared simulated date is enabled.
+6. Confirm the next semi-monthly period is `Draft` and the shared simulated date is enabled.
 7. Open `Settings` and confirm the protected backup was refreshed before transition.
 
 Expected result: the published schedule is preserved in both bounded history and the backup; the new cycle starts without deleting it.
@@ -213,7 +213,7 @@ Expected result: a second real schedule cycle completes with new availability an
 
 1. Return to the progression panel.
 2. Select `Start following cycle`.
-3. Confirm the second published period moves to history and the third consecutive draft opens.
+3. Confirm the second published period moves to history and the third semi-monthly draft opens.
 4. Inspect history and confirm it is ordered and expandable.
 5. Select `Use real date again` when progression testing is finished.
 6. Confirm the current period/history remain while date rules return to the real Edmonton day.

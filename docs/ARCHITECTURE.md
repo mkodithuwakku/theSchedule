@@ -119,7 +119,7 @@ stateDiagram-v2
     FollowingDraft --> ReminderDue
 ```
 
-Starting a new cycle creates a manual backup, archives the published schedule into six-period bounded history, opens a consecutive draft, and enables the shared simulated Edmonton date. Advancing to the reminder date executes the same delivery and deduplication code used by the daily cron.
+Starting a new cycle creates a manual backup, archives the published schedule into six-period bounded history, opens the next semi-monthly draft (days 1-14 or day 15 through month-end), and enables the shared simulated Edmonton date. Advancing to the reminder date executes the same delivery and deduplication code used by the daily cron.
 
 ## Email and deduplication
 

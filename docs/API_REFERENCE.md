@@ -139,7 +139,7 @@ Supported values:
 
 | Action | Result |
 | --- | --- |
-| `start_next_cycle` | Make manual backup, archive published schedule, open consecutive draft, enable simulated date |
+| `start_next_cycle` | Make manual backup, archive published schedule, open the next semi-monthly draft, enable simulated date |
 | `advance_day` | Advance one Edmonton calendar day and process any reminder due that day |
 | `jump_to_reminder` | Jump to release minus three days and process the reminder path |
 | `stop_simulation` | Return rules to the real Edmonton date while keeping period/history |
