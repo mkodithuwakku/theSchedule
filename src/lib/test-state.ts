@@ -1,3 +1,4 @@
+import { DEFAULT_MANAGERS } from "@/lib/default-managers";
 import { createNextSchedulePeriod } from "@/lib/schedule-progression";
 import { dateInTimeZone } from "@/lib/schedule-rollout";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -17,11 +18,7 @@ import { normalizeUatChecklistProgress } from "@/lib/uat-checklist";
 const DATA_DIR = path.join(process.cwd(), "data");
 const TEST_STATE_FILE = path.join(DATA_DIR, "test-state.json");
 
-export const CLEAN_RUN_ACTIVE_EMAILS = [
-  "m.kodithuwakku803@gmail.com"
-] as const;
-
-const cleanRunActiveEmailSet = new Set<string>(CLEAN_RUN_ACTIVE_EMAILS);
+export const CLEAN_RUN_ACTIVE_EMAILS = DEFAULT_MANAGERS.map((person) => person.email);
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -92,8 +89,8 @@ export function createCleanRunTestState(uatRunId: string, now = new Date()): Sto
   const state = createDefaultTestState(uatRunId);
   return {
     ...state,
-    // Production starts with the owner alone; every employee must be invited.
-    people: state.people.filter((person) => cleanRunActiveEmailSet.has(person.email.toLowerCase())),
+    // Default managers also work shifts; other employees join by invitation.
+    people: clone(DEFAULT_MANAGERS),
     period,
     shifts: [],
     dayProgression: {

@@ -32,7 +32,7 @@ export function assertWorkspaceRevision(existing: StoredTestState, proposed: Par
 }
 
 export async function readWorkspaceState(storeId: string): Promise<StoredTestState> {
-  // Upsert creates only an empty owner workspace; it never reintroduces demo employees.
+  // Upsert creates only an empty workspace containing the default managers; it never reintroduces demo employees.
   const record = await prisma.storeWorkspaceState.upsert({
     where: { storeId },
     update: {},

@@ -7,9 +7,10 @@ import { createDefaultTestState } from "@/lib/test-state";
 
 // Run the actual reset transaction against controlled records, including a custom
 // employee and a user belonging to another store. Never connects to Neon.
-test("clean reset retains only the owner membership, deletes orphaned employees, and creates no schedule rows", async (t) => {
+test("clean reset retains both default manager memberships, deletes orphaned employees, and creates no schedule rows", async (t) => {
   const owner = { id: "owner", email: "m.kodithuwakku803@gmail.com", role: UserRole.manager };
-  const users = [owner,
+  const morris = { id: "morris", email: "a.t.morris03@gmail.com", role: UserRole.manager };
+  const users = [owner, morris,
     { id: "ualberta", email: "kodithuw@ualberta.ca", role: UserRole.employee },
     { id: "extra", email: "extra@example.com", role: UserRole.employee },
     { id: "shared", email: "shared@example.com", role: UserRole.employee }
@@ -30,7 +31,7 @@ test("clean reset retains only the owner membership, deletes orphaned employees,
         return { count: 3 };
       },
       upsert: async (args: { create: { userId: string; role: string; active: boolean } }) => {
-        assert.equal(args.create.userId, owner.id);
+        assert([owner.id, morris.id].includes(args.create.userId));
         assert.equal(args.create.role, "manager");
         assert.equal(args.create.active, true);
       }
@@ -38,8 +39,9 @@ test("clean reset retains only the owner membership, deletes orphaned employees,
     user: {
       findMany: async () => users,
       upsert: async (args: { where: { email: string } }) => {
-        assert.equal(args.where.email, owner.email);
-        return owner;
+        const user = [owner, morris].find((user) => user.email === args.where.email);
+        assert(user);
+        return user;
       },
       deleteMany: async (args: { where: { id: { in: string[] }; memberships: { none: object } } }) => {
         assert.deepEqual(args.where.memberships, { none: {} });
@@ -70,14 +72,14 @@ test("clean reset retains only the owner membership, deletes orphaned employees,
   t.after(() => { prisma.$transaction = original; });
 
   const result = await resetProductionUat("store_test");
-  assert.deepEqual(members.map((m) => m.userId), [owner.id]);
+  assert.deepEqual(members.map((m) => m.userId), [owner.id, morris.id]);
   assert.deepEqual(deletedUsers.sort(), ["extra", "ualberta"]);
   assert(deletedAuth.includes(owner.id));
   assert.equal(createdPeriods, 0);
-  assert.equal(result.activeUsers, 1);
+  assert.equal(result.activeUsers, 2);
   assert.equal(result.awaitingInvitationUsers, 0);
   assert(saved);
-  assert.deepEqual(saved.people.map((p) => p.email), [owner.email]);
+  assert.deepEqual(saved.people.map((p) => p.email), [owner.email, morris.email]);
   assert.deepEqual(saved.shifts, []);
   assert.deepEqual(saved.scheduleHistory, []);
   assert.notEqual(saved.uatRunId, "old_run");

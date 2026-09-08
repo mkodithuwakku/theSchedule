@@ -8,7 +8,8 @@ const employees = [
   { name: "M. Kodithuwakku", email: managerEmail, role: UserRole.manager },
   { name: "Kodithuw UAlberta", email: "kodithuw@ualberta.ca", role: UserRole.employee },
   { name: "M. Kodithuwakku Hockey", email: "m.kodithuwakku.hockey@gmail.com", role: UserRole.employee },
-  { name: "Bobby Cazby", email: "bobby.cazby@gmail.com", role: UserRole.employee }
+  { name: "Bobby Cazby", email: "bobby.cazby@gmail.com", role: UserRole.employee },
+  { name: "A. T. Morris", email: "a.t.morris03@gmail.com", role: UserRole.manager }
 ];
 
 const storeHours = [

@@ -22,7 +22,7 @@ test("September 8 clean reset selects September 15 instead of skipping to Octobe
   assert.equal(state.period.endDate, "2026-09-30");
   assert.equal(state.period.availabilityOpenAt, "2026-09-08");
   assert.deepEqual(state.shifts, []);
-  assert.equal(state.people.length, 1);
+  assert.equal(state.people.length, 2);
 });
 
 test("October window opens September 23 on the real clock without losing September workflows", () => {

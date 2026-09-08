@@ -264,7 +264,7 @@ For broader database loss, Neon's [instant restore](https://neon.com/docs/introd
 | Action | Use when | Result |
 | --- | --- | --- |
 | Restore latest backup | Current workspace was accidentally damaged | Replaces workspace with the one protected snapshot; keeps identity database/session structures except run invalidation behavior |
-| Clean production UAT run | A new first-login test must begin from zero | Clears UAT and schedule artifacts, invitations, notification/audit data, OAuth links and sessions; retains only the owner manager, with no shifts/history and fresh suggested dates; every employee needs a new invitation |
+| Clean production UAT run | A new first-login test must begin from zero | Clears UAT and schedule artifacts, invitations, notification/audit data, OAuth links and sessions; retains both default managers, with no shifts/history and fresh suggested dates; other employees need a new invitation |
 | Start next schedule cycle | The current schedule was published and testing should continue normally | Archives current publication, opens the next semi-monthly draft, enables simulated date |
 
 Never use clean reset to recover an accidental midweek edit. Never use next-cycle progression merely to erase an unfinished draft.

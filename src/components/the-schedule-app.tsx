@@ -2523,7 +2523,7 @@ export function TheScheduleApp({
   async function resetProductionUatRun() {
     if (!isManager || cleanResetConfirmation !== CLEAN_RUN_CONFIRMATION) return;
     const confirmed = window.confirm(
-      "This will erase the production UAT run, all invitation/notification history, and every test account's Google link and session. Only m.kodithuwakku803@gmail.com will remain as manager. All employees will require new invitations. Continue?"
+      "This will erase the production UAT run, all invitation/notification history, and every test account's Google link and session. m.kodithuwakku803@gmail.com and a.t.morris03@gmail.com will remain as managers and schedulable staff. Other employees will require new invitations. Continue?"
     );
     if (!confirmed) return;
 
@@ -3890,7 +3890,7 @@ export function TheScheduleApp({
                         <div className="font-black">Need first-time logins and an empty run?</div>
                         <p className="mt-1 text-sm leading-6 text-ink/70">
                           Use Clean production UAT run below before marking Step 1. It backs up the schedule first, clears all test
-                          progress and sessions. Only your manager account remains; every employee must accept a fresh email
+                          progress and sessions. Both default manager accounts remain; every other employee must accept a fresh email
                           invitation. Do not reset in the middle of this guide.
                         </p>
                       </div>
@@ -4241,7 +4241,7 @@ export function TheScheduleApp({
                       <div className="font-black">This is a destructive production reset.</div>
                       <p className="mt-2 text-sm leading-6 text-ink/70">
                         It clears the workspace, checklist, invitations, normalized schedule data, notification deduplication,
-                        audit logs, Google account links, and active sessions. Only m.kodithuwakku803@gmail.com remains as manager.
+                        audit logs, Google account links, and active sessions. m.kodithuwakku803@gmail.com and a.t.morris03@gmail.com remain as managers and schedulable staff.
                         All employee memberships are removed, and users with no other store membership are deleted.
                         The schedule starts empty with suggested dates based on today; invite employees and create shifts when ready.
                       </p>

@@ -1,3 +1,4 @@
+import { DEFAULT_MANAGERS } from "@/lib/default-managers";
 import { randomUUID } from "node:crypto";
 import { Prisma, UserRole } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -5,9 +6,7 @@ import { CLEAN_RUN_ACTIVE_EMAILS, createCleanRunTestState } from "@/lib/test-sta
 import { overwriteWorkspaceBackupWithClient } from "@/lib/workspace-backup";
 export { CLEAN_RUN_CONFIRMATION, isCleanRunConfirmation } from "@/lib/uat-reset-shared";
 
-export const CANONICAL_UAT_USERS = [
-  { name: "M. Kodithuwakku", email: "m.kodithuwakku803@gmail.com", role: UserRole.manager }
-] as const;
+export const CANONICAL_UAT_USERS = DEFAULT_MANAGERS.map(({ name, email }) => ({ name, email, role: UserRole.manager }));
 
 const cleanRunActiveEmailSet = new Set<string>(CLEAN_RUN_ACTIVE_EMAILS);
 
@@ -53,7 +52,7 @@ export async function resetProductionUat(storeId: string) {
     const removedInvitations = await transaction.storeInvitation.deleteMany({ where: { storeId } });
     const removedPeriods = await transaction.schedulePeriod.deleteMany({ where: { storeId } });
 
-    // Only the owner survives a clean run. Every other
+    // The default managers survive a clean run. Every other
     // membership from this store is removed before orphaned UAT users are deleted.
     await transaction.storeMembership.deleteMany({
       where: {

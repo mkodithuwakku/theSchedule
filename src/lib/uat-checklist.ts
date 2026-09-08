@@ -987,7 +987,7 @@ export const UAT_CHECKLIST_GROUPS: UatChecklistGroup[] = [
         title: "Reset clears all UAT artifacts",
         actor: "Manager",
         steps: ["Create invitations, checklist results, availability, draft assignments, publish logs, coverage, swaps, notifications, issues, and theme preferences.", "Run the clean reset and sign back in."],
-        expected: "All artifacts are gone; only the owner manager, store configuration, an empty draft with fresh suggested dates, and an empty checklist remain.",
+        expected: "All artifacts are gone; only the two default managers, store configuration, an empty draft with fresh suggested dates, and an empty checklist remain.",
         critical: true,
         cleanRunRecommended: true
       },
@@ -996,7 +996,7 @@ export const UAT_CHECKLIST_GROUPS: UatChecklistGroup[] = [
         title: "Reset restores first-login and invitation behavior",
         actor: "Manager + employee",
         steps: [
-          "After reset, sign in as m.kodithuwakku803@gmail.com and confirm it is the only manager and person.",
+          "After reset, sign in as m.kodithuwakku803@gmail.com and confirm both default managers are present and can use their own employee view.",
           "Confirm UAlberta, Hockey, Bobby, and any other former employees are denied before invitation.",
           "Invite the employees from Employees, accept their emailed links with the matching Google accounts, and sign in."
         ],

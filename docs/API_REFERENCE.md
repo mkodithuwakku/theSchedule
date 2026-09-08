@@ -51,7 +51,7 @@ For a manager, the normalized proposal is persisted. For an employee, the server
 
 ### `DELETE /api/test-state`
 
-Manager-only development/workspace reset; returns 403 in Production. It first writes a `pre_reset` protected backup and then replaces the workspace with an empty owner workspace and new run ID. The full first-login reset is `/api/uat/reset` and clears much more data.
+Manager-only development/workspace reset; returns 403 in Production. It first writes a `pre_reset` protected backup and then replaces the workspace with an empty workspace containing the default managers and new run ID. The full first-login reset is `/api/uat/reset` and clears much more data.
 
 ## Invitations
 
@@ -170,7 +170,7 @@ Request:
 }
 ```
 
-This manager-only action backs up the workspace, clears scheduling/UAT/invitation/notification/audit artifacts, and removes affected Auth.js account links and sessions. Only `m.kodithuwakku803@gmail.com` retains an active manager membership. Every employee membership is removed; orphaned users are deleted while users with another store membership are preserved. The empty workspace contains no shifts or history and suggests future semi-monthly dates based on the reset date in Edmonton. No normalized schedule period is created. Every employee needs a new invitation. A new run ID and incremented version invalidate stale writes.
+This manager-only action backs up the workspace, clears scheduling/UAT/invitation/notification/audit artifacts, and removes affected Auth.js account links and sessions. Both `m.kodithuwakku803@gmail.com` and `a.t.morris03@gmail.com` retain active manager memberships. Every employee membership is removed; orphaned users are deleted while users with another store membership are preserved. The empty workspace contains no shifts or history and suggests future semi-monthly dates based on the reset date in Edmonton. No normalized schedule period is created. Other employees need a new invitation. A new run ID and incremented version invalidate stale writes.
 
 ## Scheduled rollout
 

@@ -84,7 +84,7 @@ The link expires after 14 days and may only be accepted once. The employee must 
 
 If an invited email is incorrect, select `Edit`, correct the address, and save while the person still shows `Invited`. Then select `Resend invite`. The app replaces the old token, renews the invitation for 14 days, sends the corrected address a fresh email, and records the attempt in Notifications. Once the employee is active, the pending-invitation edit and resend actions are no longer available.
 
-After a clean reset, only `m.kodithuwakku803@gmail.com` remains as manager. Use this flow to invite every employee, including UAlberta if using the test accounts.
+After a clean reset, `m.kodithuwakku803@gmail.com` and `a.t.morris03@gmail.com` remain as managers and schedulable staff. Use this flow to invite every employee, including UAlberta if using the test accounts.
 
 ### Accept an invitation as the employee
 

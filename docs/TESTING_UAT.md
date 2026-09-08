@@ -42,7 +42,7 @@ Before starting:
 4. Keep the manager window available for checking `Saved`, `Notifications`, and `UAT Issues`.
 5. Record the test date, deployed commit, browser/device, and tester name in your external notes or exported result file.
 
-After a clean reset, only the owner manager remains active. All employees are removed from the workspace and this store's memberships; orphaned users are deleted. Invite every employee, confirm delivery, and accept each link with the matching Google account before testing employee actions.
+After a clean reset, both default managers remain active. All employees are removed from the workspace and this store's memberships; orphaned users are deleted. Invite every employee, confirm delivery, and accept each link with the matching Google account before testing employee actions.
 
 ## How to use the in-app checklist
 
@@ -261,7 +261,7 @@ Reset:
 8. Confirm every former employee, including UAlberta, cannot access the schedule before invitation.
 9. Invite the intended employees, accept their emailed links with their matching Google accounts, and confirm they become active.
 10. Confirm first-login linking works and no old checklist, schedule, request, invitation, session, or notification state returns.
-11. Confirm only the owner plus explicitly invited employees exist; the empty draft has future suggested dates based on the reset date.
+11. Confirm both default managers plus explicitly invited employees exist; the empty draft has future suggested dates based on the reset date.
 12. Try refreshing an old pre-reset tab; it must not restore stale data.
 
 The reset preserves store configuration and recreates the seeded access baseline. It clears workspace/checklist data, invitations, normalized schedule data, notification claims/logs, audit data, OAuth accounts, and sessions. A protected `pre_reset` backup is made first, but do not use reset as a routine way to start a new schedule cycle.

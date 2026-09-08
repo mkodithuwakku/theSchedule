@@ -99,7 +99,7 @@ Changing a person's access is a database operation on `StoreMembership.role` and
 
 ## Production Verification
 
-Use the manager `Test Plan` tab as the source of truth. Start with `Guided Full Schedule Run`, which gives the exact account, clicks, and pass condition for the ordinary end-to-end schedule cycle: sign-in, invitation, availability, generation, editing, publication, employee review, coverage, swaps, reports, issue tracking, and backup. Use four separate browser profiles. Only the owner manager starts active. Every employee becomes active after accepting a live email invitation. Guided results persist through Neon and also mark their matching advanced tests.
+Use the manager `Test Plan` tab as the source of truth. Start with `Guided Full Schedule Run`, which gives the exact account, clicks, and pass condition for the ordinary end-to-end schedule cycle: sign-in, invitation, availability, generation, editing, publication, employee review, coverage, swaps, reports, issue tracking, and backup. Use four separate browser profiles. Both default managers start active. Every employee becomes active after accepting a live email invitation. Guided results persist through Neon and also mark their matching advanced tests.
 
 After the guided run, use the 119-test advanced checklist for signed-out/unauthorized paths, invite correction/resend, invite token edge cases, input validation, publish retries, approval/rejection alternatives, exports, concurrency, daily/manual backup and restore, recurring schedule cycles, provider failures, and reset verification. Results can be exported to CSV or JSON.
 

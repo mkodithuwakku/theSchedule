@@ -100,11 +100,13 @@ test("a clean production run is empty and suggests future dates from the reset d
   }
 });
 
-test("a clean production run retains only the owner as manager", () => {
+test("a clean production run retains both default managers as schedulable people", () => {
   const cleanRun = createCleanRunTestState("uat_invite_run");
-  assert.deepEqual(CLEAN_RUN_ACTIVE_EMAILS, ["m.kodithuwakku803@gmail.com"]);
+  assert.deepEqual(CLEAN_RUN_ACTIVE_EMAILS, ["m.kodithuwakku803@gmail.com", "a.t.morris03@gmail.com"]);
   assert.deepEqual(cleanRun.people.map((person) => person.email), [...CLEAN_RUN_ACTIVE_EMAILS]);
   assert.equal(cleanRun.people[0].role, "manager");
   assert.equal(cleanRun.people[0].active, true);
-  assert.equal(cleanRun.people.length, 1);
+  assert.equal(cleanRun.people.length, 2);
+  assert(cleanRun.people.every((person) => person.role === "manager" && person.active));
+  assert.equal(new Set(cleanRun.people.map((person) => person.id)).size, 2);
 });
