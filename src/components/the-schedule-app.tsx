@@ -2758,8 +2758,8 @@ export function TheScheduleApp({
       {mode === "employee" && (
         <MobileEmployeeHeader
           employee={activeEmployee}
-          period={viewedPublishedWindow?.period ?? period}
-          status={viewedPublishedWindow?.period.status ?? period.status}
+          period={activeTab === "submit" ? period : viewedPublishedWindow?.period ?? period}
+          status={activeTab === "submit" ? period.status : viewedPublishedWindow?.period.status ?? period.status}
           currentTheme={currentTheme}
           onToggleTheme={() => setThemePreference(currentTheme === "dark" ? "light" : "dark")}
           onSignOut={() => void signOut({ callbackUrl: "/" })}
@@ -3525,9 +3525,9 @@ export function TheScheduleApp({
           <MobilePageHeading
             eyebrow="Before the schedule"
             title="Availability"
-            detail={`Tell your manager when you cannot work. Submit by ${period.availabilityDeadlineAt}.`}
+            detail={`${period.name}. Tell your manager when you cannot work. Submit by ${period.availabilityDeadlineAt}.`}
           />
-          <Section title="Submit Availability" icon={<Send size={18} />}>
+          <Section title="Submit Availability" icon={<Send size={18} />}><p className="mb-4 text-sm font-semibold">{period.name}</p>
             <div className="grid gap-4 lg:grid-cols-[0.8fr_1.2fr]">
               <div className="grid gap-3 rounded-lg border border-line p-4">
                 <div

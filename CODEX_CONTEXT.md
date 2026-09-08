@@ -42,7 +42,7 @@ The current product goal is hosted, authenticated UAT with Google identities and
 - `prisma/schema.prisma` contains the production-facing data model, including Store and StoreMembership for future multi-store expansion.
 - `StoreWorkspaceState` is the current hosted shared-state bridge while schedule workflows are moved into normalized Prisma models.
 - `public/men-are-from-mars-logo.png` is the current store logo asset.
-- `docs/LAUNCH_VERIFICATION.md` lists the current release gates and evidence needed. The owner confirmed the hosted configuration/email/cron/multi-device/restore checks on September 8. Independent read-only inspection found September 15–30 published with 36 assigned shifts, four active members, four submissions, no blocking issues, and real time enabled. Preserve that live schedule; do not reset it.
+- `docs/LAUNCH_VERIFICATION.md` lists the current release gates and evidence needed. The owner confirmed the hosted configuration/email/cron/multi-device/restore checks on September 8. Independent read-only inspection found September 15–30 published with 36 filled shifts (34 employee assignments and two named manual covers), four active members, four submissions, no blocking issues, and real time enabled. Preserve that live schedule; do not reset it.
 - `README.md` is the user-facing project overview and setup guide.
 - `PRODUCTION_SETUP.md` is the hosted UAT checklist and manager domain/payment handoff.
 - `docs/README.md` is the documentation index. Its architecture, API, user, UAT, and operations guides are the maintained project reference and should be updated with relevant behavior changes.

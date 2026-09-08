@@ -12,9 +12,15 @@ Updated September 8, 2026. Record the deployed commit, deployment URL, Edmonton 
 - Local automated tests cover concurrent manager/employee writes, version rejection, notification append races, employee response filtering and redacted coverage offers, and the owner-only reset transaction. They use controlled database adapters, not Neon.
 - The local isolated browser check uses mocked API responses to verify the empty dashboard, serialized saves, and visible 409 recovery controls. It does not test Google authentication or hosted persistence.
 
-On September 8 the owner confirmed that the hosted configuration, email/cron delivery, multi-device workflows, and backup restoration checks work. These are owner-confirmed results; the agent did not repeat destructive reset/restore or send emails. The agent independently read the live workspace: September 15–30 is published, all 36 shifts are assigned, four active members have submitted availability, no blocking scheduling issues were found, and simulated time is disabled. Preserve this operational schedule.
+On September 8 the owner confirmed that the hosted configuration, email/cron delivery, multi-device workflows, and backup restoration checks work. These are owner-confirmed results; the agent did not repeat destructive reset/restore or send emails. The agent independently read the live workspace: September 15–30 is published, all 36 shifts are filled (34 employee assignments and two named manual covers), four active members have submitted availability, no blocking scheduling issues were found, and simulated time is disabled. Preserve this operational schedule.
 
 Local result for this implementation: **59/59 automated tests passed; lint, TypeScript, production build, and diff checks passed.** Browser checks confirmed zero-shift owner-only rendering, successive revisions with at most one in-flight save, visible conflict recovery, and removal of legacy workspace caches.
+
+## Deployed release evidence
+
+Commit `77b194e4f9ea009901f2c12ff9e3c66f1bcad782` reached Ready in Vercel production as `dpl_BFQc2o8aUdV4fv5mVjam74G2Jqfs` on September 8. The canonical alias is `https://mafm-schedule.vercel.app`. Post-deployment checks returned HTTP 200 for the Google sign-in page, HTTP 401 for a signed-out workspace request, and HTTP 401 for unsigned cron access; the browser reported no runtime errors. The live workspace remained at version 173 with its September publication intact. A follow-up clarifies the availability period label on mobile.
+
+The isolated mobile browser check successfully submitted October availability while retaining the employee's September submission, with one save in flight and no runtime errors. These mocked checks do not replace the owner's confirmed hosted workflows.
 
 ## Required hosted checks
 
@@ -42,7 +48,7 @@ The owner has confirmed the hosted checks below. Keep this table as the repeatab
 
 | Date (Edmonton) | Behavior |
 | --- | --- |
-| September 15–30 | Existing published schedule remains available; 36 assigned shifts verified read-only. |
+| September 15–30 | Existing published schedule remains available; 36 filled shifts (34 employee assignments and two named manual covers) verified read-only. |
 | September 23 | Daily cron opens the October 1–14 draft and fresh availability collection. September shifts, availability, coverage, and swaps remain available. |
 | September 27 | October availability reminder becomes due; a missed invocation can catch up through September 28. Delivery claims prevent duplicate sends. |
 | September 28 | October availability deadline. |
