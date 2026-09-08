@@ -42,7 +42,7 @@ Before starting:
 4. Keep the manager window available for checking `Saved`, `Notifications`, and `UAT Issues`.
 5. Record the test date, deployed commit, browser/device, and tester name in your external notes or exported result file.
 
-After a clean production reset, only the manager and Employee A remain active. Employees B and C are removed from the workspace and Neon user records so they can be created again by a fresh invitation. Invite both from the Employees screen, confirm both emails arrive, and accept each link with the matching Google account before testing their employee actions.
+After a clean reset, only the owner manager remains active. All employees are removed from the workspace and this store's memberships; orphaned users are deleted. Invite every employee, confirm delivery, and accept each link with the matching Google account before testing employee actions.
 
 ## How to use the in-app checklist
 
@@ -70,10 +70,10 @@ Follow these phases in order. The in-app cards contain the most specific click t
 
 1. Sign in as manager from the production URL.
 2. Wait for `Saved`, refresh, and prove the Neon workspace returns.
-3. Sign in Employee A in a separate profile.
+3. Invite Employee A as manager; open the emailed link in a separate profile and accept it with the matching Google account.
 4. Confirm Employee A sees their own name and no manager tools.
 
-Pass condition: the two initially active identities sign in without `OAuthAccountNotLinked` or `AccessDenied`, and Employee A cannot switch identities.
+Pass condition: the owner and newly invited Employee A sign in without `OAuthAccountNotLinked` or `AccessDenied`, and Employee A cannot switch identities.
 
 ### Phase 2: manager setup and email
 
@@ -247,7 +247,7 @@ Before reset:
 1. Export UAT results and issues.
 2. Record any evidence still needed for failures.
 3. Stop all employee editing.
-4. Confirm you can sign back into the manager and Employee A accounts and can access the Employee B/C inboxes for fresh invitations.
+4. Confirm you can sign back into the owner account and access all intended employee inboxes for fresh invitations.
 
 Reset:
 
@@ -257,11 +257,11 @@ Reset:
 4. Confirm the browser warning.
 5. Wait for the reset response and sign-out.
 6. Refresh all employee windows and confirm they are also signed out.
-7. Sign in again as manager and Employee A.
-8. Confirm Hockey and Bobby cannot access the schedule before invitation.
-9. Invite Hockey and Bobby, accept both emailed links with their matching Google accounts, and confirm both become active.
+7. Sign in again as the owner manager and confirm it is the only person, with zero shifts and empty history.
+8. Confirm every former employee, including UAlberta, cannot access the schedule before invitation.
+9. Invite the intended employees, accept their emailed links with their matching Google accounts, and confirm they become active.
 10. Confirm first-login linking works and no old checklist, schedule, request, invitation, session, or notification state returns.
-11. Confirm four active people and the September 15-30 schedule period exist after acceptance, with release due September 12.
+11. Confirm only the owner plus explicitly invited employees exist; the empty draft has future suggested dates based on the reset date.
 12. Try refreshing an old pre-reset tab; it must not restore stale data.
 
 The reset preserves store configuration and recreates the seeded access baseline. It clears workspace/checklist data, invitations, normalized schedule data, notification claims/logs, audit data, OAuth accounts, and sessions. A protected `pre_reset` backup is made first, but do not use reset as a routine way to start a new schedule cycle.

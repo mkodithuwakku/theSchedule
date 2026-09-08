@@ -12,6 +12,7 @@ This directory is the source of truth for understanding, operating, testing, and
 | Deploy, monitor, back up, restore, or troubleshoot production | [Production operations](./OPERATIONS.md) |
 | Integrate with or inspect a server route | [API reference](./API_REFERENCE.md) |
 | Set up the existing hosted UAT services | [Legacy production setup checklist](../PRODUCTION_SETUP.md) |
+| Verify launch gates and collect evidence | [Launch verification](./LAUNCH_VERIFICATION.md) |
 | Hand work to a future Codex session | [Codex project context](../CODEX_CONTEXT.md) |
 
 ## Product at a glance
@@ -27,7 +28,7 @@ The canonical UAT application is [mafm-schedule.vercel.app](https://mafm-schedul
 
 ## Current scope
 
-The active build intentionally supports one store. The Prisma model is store-aware, but the primary scheduling workspace is currently one JSON document per store. The application is suitable for controlled UAT; before broad production use, the whole-workspace saves should be replaced with transactional, normalized schedule operations.
+The active build intentionally supports one store. The Prisma model is store-aware, but the primary scheduling workspace is currently one JSON document per store. The application is suitable for controlled UAT; atomic run/version checks now reject stale saves and employee responses are filtered. Hosted launch verification remains required; normalized schedule operations are a future improvement to reduce conflicts.
 
 ## Documentation rules
 

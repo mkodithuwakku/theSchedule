@@ -10,7 +10,7 @@ The current product goal is hosted, authenticated UAT with Google identities and
 
 - Employees can accept a mocked Gmail invite, submit unavailable days, submit no unavailable days, view shifts, request coverage, offer coverage, and request swaps.
 - Managers can invite employees by Gmail, track availability, generate and assign schedules, review publish warnings, publish schedules, approve coverage/swaps, preview notifications, export reports, and log UAT issues.
-- The test accounts are `m.kodithuwakku803@gmail.com` as manager/floor staff, plus `kodithuw@ualberta.ca`, `m.kodithuwakku.hockey@gmail.com`, and `bobby.cazby@gmail.com` as employees. A clean production UAT reset starts only the manager and UAlberta employee active; Hockey and Bobby must be invited through the live email flow.
+- The test accounts are `m.kodithuwakku803@gmail.com` as manager/floor staff, plus `kodithuw@ualberta.ca`, `m.kodithuwakku.hockey@gmail.com`, and `bobby.cazby@gmail.com` as employees. A clean reset retains only m.kodithuwakku803@gmail.com as manager. All employees must be invited; the workspace has no shifts or history and suggests future period dates from the real Edmonton reset date.
 - The app has light/dark mode saved per test identity and a Men Are From Mars visual theme.
 - Reported UAT issues and software-impacting notification failures should alert the owner email, currently `m.kodithuwakku803@gmail.com`.
 - The future multi-store direction is documented, but the active test build is intentionally single-store.
@@ -24,14 +24,14 @@ The current product goal is hosted, authenticated UAT with Google identities and
 - `src/lib/guided-uat.ts` defines the ordered, click-by-click normal schedule journey shown first in Test Plan, including progression into the next schedule.
 - `src/lib/uat-checklist.ts` defines the 119-flow advanced production UAT plan and validates persisted manual results; guided steps reuse matching advanced IDs.
 - `src/lib/schedule-progression.ts` creates semi-monthly schedule periods (days 1-14, then day 15 through month-end), advances the shared manager-controlled UAT date, and keeps bounded six-period publication history.
-- `src/lib/uat-reset.ts` performs the manager-only clean-run reset, clears OAuth/session and UAT artifacts, starts two identities active, leaves Hockey/Bobby awaiting fresh invitations, and creates a new run identifier.
+- `src/lib/uat-reset.ts` performs the manager-only clean-run reset, clears OAuth/session and UAT artifacts, retains only the owner manager, removes all employee memberships and orphaned users, and creates a new run identifier.
 - `src/lib/auth.ts` configures Google/Auth.js and permits verified Google identities to link to pre-seeded or invited user records on first login.
 - `src/lib/access.ts` resolves the signed-in Google account to an active Neon store membership.
 - `src/lib/workspace-state.ts` persists and role-filters the shared schedule workspace in Neon.
 - `src/lib/workspace-backup.ts` keeps one overwritten, SHA-256-verified workspace snapshot per store and performs guarded restores with stale-tab invalidation.
 - `src/app/api/test-state/route.ts` requires authentication, allows managers full writes, and sanitizes employee writes to their own permitted workflow data.
 - `src/app/api/notifications/test-email/route.ts` handles test notification sends/logging.
-- `src/app/api/cron/schedule-rollout/route.ts` is the `CRON_SECRET`-protected daily Vercel job that overwrites each store's protected schedule snapshot and sends availability requests three Edmonton calendar days before release.
+- `src/app/api/cron/schedule-rollout/route.ts` is the `CRON_SECRET`-protected daily Vercel job that opens due schedule windows on the real clock, overwrites protected snapshots, and sends availability reminders starting three Edmonton calendar days before release with catch-up through the deadline.
 - `src/app/api/schedule/publish/route.ts` is the manager-only publication path that persists publication and sends one consolidated schedule email per active member.
 - `src/lib/schedule-rollout.ts` contains pure Edmonton date, recipient, consolidation, and retry-deduplication planning logic.
 - `src/lib/schedule-notifications.ts` connects rollout plans to Prisma notification claims and Resend delivery.
@@ -42,6 +42,7 @@ The current product goal is hosted, authenticated UAT with Google identities and
 - `prisma/schema.prisma` contains the production-facing data model, including Store and StoreMembership for future multi-store expansion.
 - `StoreWorkspaceState` is the current hosted shared-state bridge while schedule workflows are moved into normalized Prisma models.
 - `public/men-are-from-mars-logo.png` is the current store logo asset.
+- `docs/LAUNCH_VERIFICATION.md` lists the current release gates and evidence needed. The owner confirmed the hosted configuration/email/cron/multi-device/restore checks on September 8. Independent read-only inspection found September 15–30 published with 36 assigned shifts, four active members, four submissions, no blocking issues, and real time enabled. Preserve that live schedule; do not reset it.
 - `README.md` is the user-facing project overview and setup guide.
 - `PRODUCTION_SETUP.md` is the hosted UAT checklist and manager domain/payment handoff.
 - `docs/README.md` is the documentation index. Its architecture, API, user, UAT, and operations guides are the maintained project reference and should be updated with relevant behavior changes.
@@ -64,7 +65,7 @@ Starting the development server does not reset Neon. Use the manager-only `Test 
 
 The app should start before schedule release so the manager can test the whole cycle:
 
-1. Manager sends live invitations to Hockey and Bobby; each employee accepts from email with the matching Google account.
+1. Manager sends live invitations to every employee (including UAlberta when testing); each employee accepts from email with the matching Google account.
 2. Employee submits unavailable days, or submits no unavailable days.
 3. Manager checks availability status and missing-submission highlights.
 4. Manager generates a draft schedule.
@@ -95,13 +96,13 @@ Important UX expectations from the user:
 ## Current Test Features
 
 - Test-mode scenario buttons: Fresh pre-release, Availability submitted, Draft generated, Published.
-- Server-backed test persistence through `/api/test-state`, with browser localStorage fallback.
-- Shared workspace state revalidates whenever a browser tab becomes active, and visible manager sessions poll every five seconds so employee submissions appear without a manual resubmission or page reload. Client saves are briefly consolidated to reduce overlapping whole-workspace writes.
+- Server-backed test persistence through `/api/test-state`, without browser workspace caching; legacy caches are cleared and failed authenticated reads never use a cache fallback.
+- Shared workspace state revalidates whenever a browser tab becomes active, and visible manager sessions poll every five seconds and employee sessions every fifteen seconds so employee submissions appear without a manual resubmission or page reload. Client saves are debounced and serialized. Every write requires a matching workspaceVersion and uatRunId; conflicts pause saving and offer download/reload recovery. Employee GET and PUT responses are allowlisted, and cached state never substitutes for a failed authenticated read.
 - Production-visible guided full schedule run followed by a 119-flow advanced manager UAT plan, with shared manual status tracking, filtering, and CSV/JSON export.
 - Manager-only day progression can archive a published period, open the next draft, advance or jump to the reminder date, run real deduplicated reminder delivery, and repeat after the next publication.
 - One bounded Neon schedule backup per store, overwritten daily or on demand, automatically refreshed before destructive resets, and restorable by an active manager.
 - Every successful workspace save refreshes the same backup row; the cron covers idle days, while same-day manual and `pre_reset` snapshots are preserved from automatic save overwrites.
-- Manager-only clean-run reset for first-login retesting, guarded by typed confirmation and stale-run write rejection. It deletes Hockey, Bobby, and orphaned extra test invitees from Neon so their user creation, Resend invitation emails, and Google acceptance can be tested from zero. The current rollout baseline opens availability September 5, closes it September 10, is due September 12, and covers September 15-30, 2026.
+- Manager-only clean-run reset for first-login retesting, guarded by typed confirmation and stale-run write rejection. It removes every employee membership and orphaned employee user from Neon, leaving only the owner as manager. There are no shifts, employee records, requests, or schedule history. Suggested schedule dates use the real reset date, without creating a normalized schedule period.
 - UAT issue tracker and exports.
 - Notification preview center and notification log.
 - Owner alerts for reported UAT issues, notification delivery failures, and notification API outages.
@@ -123,12 +124,20 @@ Multi-store support is planned but not active yet. When it is added:
 - Add store-specific branding while keeping light/dark mode personal.
 - Replace or reshape the single-store JSON test repository before multi-store UAT.
 
+## Production schedule lifecycle
+
+- `src/lib/schedule-lifecycle.ts` runs before daily reminders. It snapshots and atomically opens the next draft on its availability opening date, retaining ongoing published shifts and requests.
+- October 1–14 opens September 23; reminder September 27, availability deadline September 28, planned manager publication September 30. October 15–31 opens October 7 if the previous period is published.
+- Automatic rollover never assigns or publishes shifts and never discards an unfinished draft. Keep `dayProgression.enabled` false in production.
+- Employees see published windows while the manager prepares a later draft. Coverage/swaps update the appropriate historical or current publication. Availability counts and edits belong to the work period; older submissions remain for ongoing shift validation.
+- Local suite: 59 passing tests, including real-clock transitions, repeated/missed cron invocations, preserved September workflows, and distinct October notification keys. Browser checks use isolated mocked persistence.
+
 ## Next Likely Work
 
 Before broader real-user UAT:
 
-- Confirm `CRON_SECRET` is present in Vercel Production before relying on the scheduled rollout route.
-- Replace whole-workspace autosaves with normalized Prisma route handlers/server actions and database transactions. This prevents stale manager and employee browser snapshots from overwriting each other.
+- Monitor the September 23 automatic opening and September 27 reminder using the owner-confirmed production cron configuration.
+- Version-checked saves now reject stale snapshots atomically. Normalized transactional operations remain a future improvement to reduce conflicts; verify the new conflict/download/reload flow across devices before launch.
 - Add browser-level authentication tests for signed-out, uninvited, inactive, employee, and manager accounts; the current unit suite covers employee state-write authorization.
 - Add manager-controlled activate/deactivate and promote/demote controls backed by `StoreMembership`, with audit logging and protection against removing the final active manager.
 - Complete hosted mobile UAT for the employee dashboard, availability, team agenda, coverage, and swaps on a real phone.

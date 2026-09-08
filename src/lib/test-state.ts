@@ -1,3 +1,5 @@
+import { createNextSchedulePeriod } from "@/lib/schedule-progression";
+import { dateInTimeZone } from "@/lib/schedule-rollout";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
@@ -16,13 +18,7 @@ const DATA_DIR = path.join(process.cwd(), "data");
 const TEST_STATE_FILE = path.join(DATA_DIR, "test-state.json");
 
 export const CLEAN_RUN_ACTIVE_EMAILS = [
-  "m.kodithuwakku803@gmail.com",
-  "kodithuw@ualberta.ca"
-] as const;
-
-export const CLEAN_RUN_REINVITE_EMAILS = [
-  "m.kodithuwakku.hockey@gmail.com",
-  "bobby.cazby@gmail.com"
+  "m.kodithuwakku803@gmail.com"
 ] as const;
 
 const cleanRunActiveEmailSet = new Set<string>(CLEAN_RUN_ACTIVE_EMAILS);
@@ -81,20 +77,25 @@ export function createDefaultTestState(uatRunId = DEFAULT_UAT_RUN_ID): StoredTes
   };
 }
 
-function cleanRunPeriod(): SchedulePeriod {
-  return clone(schedulePeriod);
+function cleanRunPeriod(now: Date): SchedulePeriod {
+  // Use the nearest upcoming period with at least one remaining day for availability.
+  const today = dateInTimeZone(now, "America/Edmonton");
+  let period = createNextSchedulePeriod({ ...schedulePeriod, endDate: today });
+  while (period.availabilityDeadlineAt <= today || !["01", "15"].includes(period.startDate.slice(-2))) {
+    period = createNextSchedulePeriod(period);
+  }
+  return { ...period, availabilityOpenAt: period.availabilityOpenAt < today ? today : period.availabilityOpenAt };
 }
 
 export function createCleanRunTestState(uatRunId: string, now = new Date()): StoredTestState {
-  const period = cleanRunPeriod();
+  const period = cleanRunPeriod(now);
   const state = createDefaultTestState(uatRunId);
   return {
     ...state,
-    // Keep only the two persistent identities. The database reset removes
-    // reinvite identities so the manager can exercise the real invitation flow.
+    // Production starts with the owner alone; every employee must be invited.
     people: state.people.filter((person) => cleanRunActiveEmailSet.has(person.email.toLowerCase())),
     period,
-    shifts: generateDefaultShifts(period),
+    shifts: [],
     dayProgression: {
       enabled: false,
       currentDate: period.availabilityOpenAt,
@@ -124,6 +125,7 @@ export function normalizeTestState(candidate: Partial<StoredTestState>): StoredT
       : candidatePeriod.availabilityOpenAt;
 
   return {
+    workspaceVersion: Number.isInteger(candidate.workspaceVersion) ? candidate.workspaceVersion : undefined,
     uatRunId: typeof candidate.uatRunId === "string" && candidate.uatRunId.trim() ? candidate.uatRunId : defaults.uatRunId,
     people: Array.isArray(candidate.people) ? candidate.people : defaults.people,
     period: candidate.period ?? defaults.period,

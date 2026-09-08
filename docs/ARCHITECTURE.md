@@ -41,7 +41,9 @@ The application never treats hidden navigation as authorization. Every sensitive
 
 `StoreWorkspaceState` stores one normalized JSON document per store. It currently contains the active period, people, availability, shifts, requests, notifications, audit entries, UAT results, issues, simulated date, and bounded history.
 
-Every workspace has a `uatRunId`. Writes from an old browser tab fail with HTTP `409` when a clean reset or restore has changed the run identifier. This is the primary stale-tab guard.
+Every workspace has a `uatRunId`. Writes from an old browser tab fail with HTTP `409` when a clean reset or restore has changed the run identifier. Every read also returns `workspaceVersion` from the database row. Every ordinary write atomically matches that version and run ID before replacing JSON and incrementing the version. Publishing and day progression enforce the same browser revision. Server notification appends recompute against the latest state and retry bounded version conflicts within the same run.
+
+Employee responses are allowlisted before serialization: own availability, drafts, preferences and notifications; published team shifts without internal notes; relevant coverage and swaps. Coworker emails, draft schedules, audit logs, UAT issues/results, and invite acceptances are not sent. Workspace payloads are no longer written to localStorage. Legacy workspace caches are cleared on app load; failed authenticated reads never fall back to cached or fixture data.
 
 Employee writes are reconstructed on the server. An employee may change only their own availability, personal preference, valid coverage/swap actions, their own issue reports, and associated audit/notification additions. Manager-controlled schedule fields from an employee payload are discarded.
 
@@ -49,7 +51,7 @@ Employee writes are reconstructed on the server. An employee may change only the
 
 `prisma/schema.prisma` includes normalized models for users, stores, memberships, invitations, periods, availability, unavailable days, shifts, templates, store hours, coverage, swaps, snapshots, notifications, audit logs, the current workspace, and the workspace backup.
 
-The normalized schedule models are not yet the exclusive runtime source for all UI operations. This is the most important architectural limitation: concurrent whole-workspace edits can overwrite unrelated changes made from another current tab. UAT should wait for `Saved` and refresh between critical cross-account transitions.
+The normalized schedule models are not yet the exclusive runtime source for all UI operations. Atomic version checks prevent silent lost updates, but whole-workspace edits still cause conflicts even for unrelated changes. The client serializes saves and pauses on conflict or uncertain delivery, retaining unsaved changes for download and explicit reload. Normalized operations would reduce these conflicts.
 
 ## Core data flow
 

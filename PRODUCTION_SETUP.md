@@ -84,7 +84,7 @@ Changing a person's access is a database operation on `StoreMembership.role` and
 
    Run both commands with the production `DATABASE_URL`. `0_init` records the tables already present without recreating them; `prisma:deploy` then applies pending notification and workspace-backup migrations.
 
-   Vercel runs `/api/cron/schedule-rollout` daily at 16:00 UTC. The route overwrites the one `StoreWorkspaceBackup` row for each store while also calculating the date in `America/Edmonton`, sending availability requests exactly three calendar days before release, and using database deduplication records to skip retries that have already been processed.
+   Vercel runs `/api/cron/schedule-rollout` daily at 16:00 UTC. The route opens due next-period drafts on the real store date, preserving ongoing published shifts and requests, then overwrites the one `StoreWorkspaceBackup` row for each store while calculating the date in `America/Edmonton`, sending availability requests from three calendar days before release through the deadline, and using database deduplication records to skip retries that have already been processed.
 
 6. Seed the store and manager.
    `SEED_MANAGER_EMAIL` should stay as `m.kodithuwakku803@gmail.com` unless the manager account changes.
@@ -99,7 +99,7 @@ Changing a person's access is a database operation on `StoreMembership.role` and
 
 ## Production Verification
 
-Use the manager `Test Plan` tab as the source of truth. Start with `Guided Full Schedule Run`, which gives the exact account, clicks, and pass condition for the ordinary end-to-end schedule cycle: sign-in, invitation, availability, generation, editing, publication, employee review, coverage, swaps, reports, issue tracking, and backup. Use four separate browser profiles. The manager and UAlberta employee start active; Hockey and Bobby become active only after accepting the manager's live email invitations. Guided results persist through Neon and also mark their matching advanced tests.
+Use the manager `Test Plan` tab as the source of truth. Start with `Guided Full Schedule Run`, which gives the exact account, clicks, and pass condition for the ordinary end-to-end schedule cycle: sign-in, invitation, availability, generation, editing, publication, employee review, coverage, swaps, reports, issue tracking, and backup. Use four separate browser profiles. Only the owner manager starts active. Every employee becomes active after accepting a live email invitation. Guided results persist through Neon and also mark their matching advanced tests.
 
 After the guided run, use the 119-test advanced checklist for signed-out/unauthorized paths, invite correction/resend, invite token edge cases, input validation, publish retries, approval/rejection alternatives, exports, concurrency, daily/manual backup and restore, recurring schedule cycles, provider failures, and reset verification. Results can be exported to CSV or JSON.
 
@@ -136,8 +136,8 @@ Only an active manager can perform the full reset:
 3. Type `RESET CLEAN RUN` exactly.
 4. Confirm the browser warning.
 5. The reset clears workspace/checklist state, invitations, normalized schedules, notification deduplication and logs, audit logs, Auth.js Google account links, and active sessions.
-6. The store configuration and four test identities remain, but only the manager and UAlberta memberships start active. Hockey and Bobby are removed from the directory and must be invited again. For the September 2026 rollout, the clean period opens availability September 5, closes it September 10, is due for release September 12, and covers September 15-30.
-7. Every browser is signed out. Sign in as the manager and UAlberta employee, then invite and accept Hockey and Bobby before continuing.
+6. The store configuration and owner manager remain. All employee memberships and orphaned users are removed. Shifts and history are empty, and suggested period dates are based on the real reset date.
+7. Every browser is signed out. Sign in as the owner manager, then invite every intended employee and accept each invitation before continuing.
 
 The reset is protected by server-side manager authorization and an exact confirmation phrase. Each run has a unique identifier, so an old tab from a previous run receives a conflict instead of restoring stale data.
 

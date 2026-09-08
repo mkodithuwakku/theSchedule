@@ -1,3 +1,4 @@
+import { openDueScheduleWindows } from "@/lib/schedule-lifecycle";
 import { sendDueAvailabilityReminders } from "@/lib/schedule-notifications";
 import { overwriteAllWorkspaceBackups } from "@/lib/workspace-backup";
 
@@ -9,6 +10,7 @@ export async function GET(request: Request) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const windows = await openDueScheduleWindows();
   const [backups, storeResults] = await Promise.all([
     overwriteAllWorkspaceBackups(),
     sendDueAvailabilityReminders()
@@ -16,6 +18,7 @@ export async function GET(request: Request) {
   const deliveries = storeResults.flatMap((result) => result.deliveries);
   return Response.json({
     ok: true,
+    windows,
     storesProcessed: storeResults.length,
     backups: {
       storesProcessed: backups.length,

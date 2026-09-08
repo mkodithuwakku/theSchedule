@@ -1,15 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { Prisma, ScheduleStatus, UserRole } from "@prisma/client";
+import { Prisma, UserRole } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { CLEAN_RUN_ACTIVE_EMAILS, CLEAN_RUN_REINVITE_EMAILS, createCleanRunTestState } from "@/lib/test-state";
+import { CLEAN_RUN_ACTIVE_EMAILS, createCleanRunTestState } from "@/lib/test-state";
 import { overwriteWorkspaceBackupWithClient } from "@/lib/workspace-backup";
 export { CLEAN_RUN_CONFIRMATION, isCleanRunConfirmation } from "@/lib/uat-reset-shared";
 
 export const CANONICAL_UAT_USERS = [
-  { name: "M. Kodithuwakku", email: "m.kodithuwakku803@gmail.com", role: UserRole.manager },
-  { name: "Kodithuw UAlberta", email: "kodithuw@ualberta.ca", role: UserRole.employee },
-  { name: "M. Kodithuwakku Hockey", email: "m.kodithuwakku.hockey@gmail.com", role: UserRole.employee },
-  { name: "Bobby Cazby", email: "bobby.cazby@gmail.com", role: UserRole.employee }
+  { name: "M. Kodithuwakku", email: "m.kodithuwakku803@gmail.com", role: UserRole.manager }
 ] as const;
 
 const cleanRunActiveEmailSet = new Set<string>(CLEAN_RUN_ACTIVE_EMAILS);
@@ -56,7 +53,7 @@ export async function resetProductionUat(storeId: string) {
     const removedInvitations = await transaction.storeInvitation.deleteMany({ where: { storeId } });
     const removedPeriods = await transaction.schedulePeriod.deleteMany({ where: { storeId } });
 
-    // Only the two persistent test identities survive a clean run. Every other
+    // Only the owner survives a clean run. Every other
     // membership from this store is removed before orphaned UAT users are deleted.
     await transaction.storeMembership.deleteMany({
       where: {
@@ -111,21 +108,6 @@ export async function resetProductionUat(storeId: string) {
 
     const resetAt = new Date();
     const cleanState = createCleanRunTestState(`uat_${randomUUID()}`, resetAt);
-    await transaction.schedulePeriod.create({
-      data: {
-        id: cleanState.period.id,
-        storeId,
-        name: cleanState.period.name,
-        startDate: new Date(`${cleanState.period.startDate}T12:00:00.000Z`),
-        endDate: new Date(`${cleanState.period.endDate}T12:00:00.000Z`),
-        releaseDate: new Date(`${cleanState.period.releaseDate}T12:00:00.000Z`),
-        availabilityOpenAt: new Date(`${cleanState.period.availabilityOpenAt}T12:00:00.000Z`),
-        availabilityDeadlineAt: new Date(`${cleanState.period.availabilityDeadlineAt}T23:59:00.000Z`),
-        status: ScheduleStatus.draft,
-        createdById: manager.id
-      }
-    });
-
     await transaction.storeWorkspaceState.upsert({
       where: { storeId },
       update: {
@@ -142,7 +124,7 @@ export async function resetProductionUat(storeId: string) {
       resetAt: resetAt.toISOString(),
       restoredUsers: canonicalUsers.length,
       activeUsers: CLEAN_RUN_ACTIVE_EMAILS.length,
-      awaitingInvitationUsers: CLEAN_RUN_REINVITE_EMAILS.length,
+      awaitingInvitationUsers: 0,
       removedUsers: removedUsers.count,
       removedAccounts: removedAccounts.count,
       removedSessions: removedSessions.count,

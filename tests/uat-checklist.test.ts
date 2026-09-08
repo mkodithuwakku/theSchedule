@@ -8,7 +8,6 @@ import {
 import { GUIDED_UAT_ACCOUNTS, GUIDED_UAT_PHASES, GUIDED_UAT_STEPS } from "@/lib/guided-uat";
 import {
   CLEAN_RUN_ACTIVE_EMAILS,
-  CLEAN_RUN_REINVITE_EMAILS,
   createCleanRunTestState,
   createDefaultTestState,
   normalizeTestState
@@ -79,26 +78,33 @@ test("a clean run keeps its unique identifier through state normalization", () =
   assert.equal(normalizeTestState(cleanRun).uatRunId, "uat_new_run");
 });
 
-test("a clean production run uses the September rollout schedule window", () => {
-  const cleanRun = createCleanRunTestState("uat_new_run", new Date("2026-08-17T18:00:00.000Z"));
-
-  assert.equal(cleanRun.period.name, "September 15-30, 2026");
-  assert.equal(cleanRun.period.availabilityOpenAt, "2026-09-05");
-  assert.equal(cleanRun.period.availabilityDeadlineAt, "2026-09-10");
-  assert.equal(cleanRun.period.releaseDate, "2026-09-12");
-  assert.equal(cleanRun.period.startDate, "2026-09-15");
-  assert.equal(cleanRun.period.endDate, "2026-09-30");
-  assert(cleanRun.shifts.length > 0);
-  assert(cleanRun.shifts.every((shift) => shift.schedulePeriodId === cleanRun.period.id));
+test("a clean production run is empty and suggests future dates from the reset date", () => {
+  for (const resetDate of ["2026-09-08", "2026-12-31", "2028-02-27"]) {
+    const cleanRun = createCleanRunTestState("uat_new_run", new Date(`${resetDate}T18:00:00Z`));
+    assert(cleanRun.period.availabilityOpenAt >= resetDate);
+    assert(cleanRun.period.availabilityOpenAt < cleanRun.period.availabilityDeadlineAt);
+    assert(cleanRun.period.availabilityDeadlineAt < cleanRun.period.releaseDate);
+    assert(cleanRun.period.releaseDate < cleanRun.period.startDate);
+    assert(["01", "15"].includes(cleanRun.period.startDate.slice(-2)));
+    assert.equal(cleanRun.period.status, "draft");
+    assert.deepEqual(cleanRun.shifts, []);
+    assert.deepEqual(cleanRun.availability, []);
+    assert.deepEqual(cleanRun.coverage, []);
+    assert.deepEqual(cleanRun.swaps, []);
+    assert.deepEqual(cleanRun.scheduleHistory, []);
+    assert.deepEqual(cleanRun.preferences, {});
+    assert.deepEqual(cleanRun.notifications, []);
+    assert.deepEqual(cleanRun.uatChecklist, {});
+    assert.equal(cleanRun.dayProgression.enabled, false);
+    assert.deepEqual(normalizeTestState(cleanRun).shifts, []);
+  }
 });
 
-test("a clean production run leaves two accounts for real email invitations", () => {
-  const cleanRun = createCleanRunTestState("uat_invite_run", new Date("2026-08-17T18:00:00.000Z"));
-
+test("a clean production run retains only the owner as manager", () => {
+  const cleanRun = createCleanRunTestState("uat_invite_run");
+  assert.deepEqual(CLEAN_RUN_ACTIVE_EMAILS, ["m.kodithuwakku803@gmail.com"]);
   assert.deepEqual(cleanRun.people.map((person) => person.email), [...CLEAN_RUN_ACTIVE_EMAILS]);
-  assert.deepEqual(CLEAN_RUN_REINVITE_EMAILS, [
-    "m.kodithuwakku.hockey@gmail.com",
-    "bobby.cazby@gmail.com"
-  ]);
-  assert(CLEAN_RUN_REINVITE_EMAILS.every((email) => !cleanRun.people.some((person) => person.email === email)));
+  assert.equal(cleanRun.people[0].role, "manager");
+  assert.equal(cleanRun.people[0].active, true);
+  assert.equal(cleanRun.people.length, 1);
 });

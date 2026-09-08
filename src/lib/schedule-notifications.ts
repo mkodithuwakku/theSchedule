@@ -13,7 +13,7 @@ import {
 } from "@/lib/schedule-rollout";
 import { normalizeTestState } from "@/lib/test-state";
 import type { StoredTestState } from "@/lib/test-state-shared";
-import { readWorkspaceState, writeWorkspaceState } from "@/lib/workspace-state";
+import { updateWorkspaceState } from "@/lib/workspace-state";
 
 function deliveryStatus(status: string): NotificationDispatchResult["status"] {
   if (status === "sent" || status === "failed") return status;
@@ -143,14 +143,13 @@ async function sendDueAvailabilityRemindersForStoreRecord(store: ReminderStoreRe
     createdAt
   }));
   const deliveryIds = new Set(deliveryNotifications.map((notification) => notification.id));
-  const latestState = await readWorkspaceState(store.id);
-  await writeWorkspaceState(store.id, {
+  await updateWorkspaceState(store.id, state.uatRunId, (latestState) => ({
     ...latestState,
     notifications: [
       ...deliveryNotifications,
       ...latestState.notifications.filter((notification) => !deliveryIds.has(notification.id))
     ]
-  });
+  }));
 
   return { storeId: store.id, periodId: state.period.id, deliveries };
 }

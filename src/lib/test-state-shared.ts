@@ -69,6 +69,8 @@ export type ArchivedSchedule = {
 };
 
 export type StoredTestState = {
+  /** Database revision; absent only on local fixtures that have never been saved. */
+  workspaceVersion?: number;
   uatRunId: string;
   people: Employee[];
   period: SchedulePeriod;

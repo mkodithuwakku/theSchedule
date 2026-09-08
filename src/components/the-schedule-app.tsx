@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { allWorkspaceShifts, assignWorkspaceShifts, publishedScheduleWindows, createNextSchedulePeriod } from "@/lib/schedule-progression";
 import type { AppAccess } from "@/lib/access-shared";
 import { actionNotificationEmail, ownerAlertEmail } from "@/lib/email-templates";
 import { availabilityReminderDate, dateInTimeZone } from "@/lib/schedule-rollout";
@@ -97,6 +98,7 @@ import {
 import {
   hasWorkspaceStateChanged,
   MANAGER_WORKSPACE_REFRESH_MS,
+  EMPLOYEE_WORKSPACE_REFRESH_MS,
   WORKSPACE_FOCUS_RETRY_MS,
   WORKSPACE_SAVE_DEBOUNCE_MS,
   workspaceStateFingerprint
@@ -579,29 +581,24 @@ export function TheScheduleApp({
 }) {
   const isManager = currentUser.role === "manager";
   const isDevelopmentTestMode = process.env.NODE_ENV !== "production";
+  const [clockNow, setClockNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = window.setInterval(() => setClockNow(new Date()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
   const [mode, setMode] = useState<"manager" | "employee">(isManager ? "manager" : "employee");
   const [activeTab, setActiveTab] = useState<TabId>("dashboard");
-  const [people, setPeople] = useState<Employee[]>(() => {
-    const signedInPerson = employees.find((employee) => employee.email.toLowerCase() === currentUser.email);
-    if (signedInPerson) return employees;
-    return [
-      ...employees,
-      {
-        id: `account_${currentUser.userId}`,
-        name: currentUser.name,
-        email: currentUser.email,
-        role: currentUser.role,
-        active: true
-      }
-    ];
-  });
+  const [people, setPeople] = useState<Employee[]>([{
+    id: `account_${currentUser.userId}`, name: currentUser.name, email: currentUser.email,
+    role: currentUser.role, active: true
+  }]);
   const [uatRunId, setUatRunId] = useState(DEFAULT_UAT_RUN_ID);
   const [period, setPeriod] = useState<SchedulePeriod>(schedulePeriod);
-  const [shifts, setShifts] = useState<Shift[]>(() => generateDefaultShifts(schedulePeriod));
+  const [shifts, setShifts] = useState<Shift[]>([]);
   const [availability, setAvailability] = useState<AvailabilitySubmission[]>([]);
   const [coverage, setCoverage] = useState<CoverageRequest[]>([]);
   const [swaps, setSwaps] = useState<SwapRequest[]>([]);
-  const [auditLog, setAuditLog] = useState<AuditEntry[]>(DEFAULT_AUDIT_LOG);
+  const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
   const [notifications, setNotifications] = useState<NotificationEntry[]>([]);
   const [availabilityDrafts, setAvailabilityDrafts] = useState<Record<string, Unavailability[]>>({});
   const [preferences, setPreferences] = useState<Record<string, UserPreference>>({});
@@ -613,10 +610,13 @@ export function TheScheduleApp({
     currentDate: schedulePeriod.availabilityOpenAt,
     cycleNumber: 1
   });
+  const [selectedPublishedPeriodId, setSelectedPublishedPeriodId] = useState("");
   const [scheduleHistory, setScheduleHistory] = useState<ArchivedSchedule[]>([]);
   const [dayProgressionAction, setDayProgressionAction] = useState<DayProgressionAction | null>(null);
   const [dayProgressionMessage, setDayProgressionMessage] = useState("");
   const [hasLoadedStoredState, setHasLoadedStoredState] = useState(false);
+  const [persistenceError, setPersistenceError] = useState("");
+  const [serverActionPending, setServerActionPending] = useState(false);
   const [persistenceStatus, setPersistenceStatus] = useState<PersistenceStatus>("loading");
   const [testEmailStatus, setTestEmailStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [testEmailMessage, setTestEmailMessage] = useState("");
@@ -668,7 +668,11 @@ export function TheScheduleApp({
   });
   const lastSyncedStateRef = useRef<string | null>(null);
   const refreshRequestRef = useRef<AbortController | null>(null);
-  const saveRequestRef = useRef<AbortController | null>(null);
+  const workspaceVersionRef = useRef<number | undefined>(undefined);
+  const saveChainRef = useRef<Promise<void>>(Promise.resolve());
+  const saveBlockedRef = useRef(false);
+  const serverActionRef = useRef(false);
+  const unsavedSnapshotRef = useRef<StoredTestState | null>(null);
   const saveSequenceRef = useRef(0);
   const savePendingRef = useRef(false);
   const skipNextPersistenceRef = useRef(false);
@@ -699,13 +703,16 @@ export function TheScheduleApp({
   const calendarWeeks = useMemo(() => buildCalendarWeeks(period, shiftsByDate), [period, shiftsByDate]);
   const finalHours = useMemo(() => calculateHours(people, shifts, false), [people, shifts]);
   const initialHours = useMemo(() => calculateHours(people, shifts, true), [people, shifts]);
-  const activeSubmission = availability.find((submission) => submission.userId === activeEmployee.id);
+  const periodAvailability = availability.filter((submission) => submission.schedulePeriodId === period.id);
+  const activeSubmission = periodAvailability.find((submission) => submission.userId === activeEmployee.id);
   const activeAvailabilityDraft = sortUnavailableEntries(availabilityDrafts[activeEmployee.id] ?? []);
-  const submittedIds = new Set(availability.filter((submission) => submission.submittedAt).map((submission) => submission.userId));
+  const submittedIds = new Set(periodAvailability.filter((submission) => submission.submittedAt).map((submission) => submission.userId));
   const hasAcceptedInvite = (employeeId: string) => inviteAcceptances.some((acceptance) => acceptance.employeeId === employeeId);
   const hasInviteSent = (employeeId: string) =>
     notifications.some((entry) => entry.type === "employee_invited" && entry.userId === employeeId);
   const inviteStatusFor = (employee: Employee) => {
+    // Employee responses contain only active members; their emails stay private.
+    if (!isManager && employee.id !== activeEmployee.id && employee.active) return "active" as const;
     if (activeMemberEmailSet.has(employee.email.toLowerCase()) || hasAcceptedInvite(employee.id)) return "active" as const;
     if (hasInviteSent(employee.id) || employee.active) return "invited" as const;
     return "inactive" as const;
@@ -714,13 +721,30 @@ export function TheScheduleApp({
   const activeInviteAccepted = activeInviteStatus === "active";
   const schedulableEmployees = activeEmployees.filter((employee) => inviteStatusFor(employee) === "active");
   const schedulableSubmittedIds = new Set(
-    availability
+    periodAvailability
       .filter((submission) => submission.submittedAt && schedulableEmployees.some((employee) => employee.id === submission.userId))
       .map((submission) => submission.userId)
   );
   const missingAvailability = schedulableEmployees.filter((employee) => !submittedIds.has(employee.id));
   const activeEmployeeNeedsAvailability = activeInviteAccepted && !submittedIds.has(activeEmployee.id);
-  const myShifts = shifts
+  const todayIso = dayProgression.enabled
+    ? dayProgression.currentDate
+    : isDevelopmentTestMode
+      ? dateToIso(new Date(TEST_TODAY))
+      : dateInTimeZone(clockNow, store.timezone);
+  const publishedWindows = publishedScheduleWindows({ period, shifts, scheduleHistory });
+  const publishedShifts = publishedWindows.filter((window) => window.period.endDate >= todayIso).flatMap((window) => window.shifts);
+  const allShifts = allWorkspaceShifts({ shifts, scheduleHistory });
+  const viewedPublishedWindow = publishedWindows.find((window) => window.period.id === selectedPublishedPeriodId)
+    ?? publishedWindows.find((window) => window.period.endDate >= todayIso)
+    ?? publishedWindows.at(-1);
+  const publishedWeeks = viewedPublishedWindow ? buildCalendarWeeks(viewedPublishedWindow.period,
+    getDatesInPeriod(viewedPublishedWindow.period).map((date) => ({ date,
+      shifts: viewedPublishedWindow.shifts.filter((shift) => shift.date === date)
+        .sort((a, b) => a.startTime.localeCompare(b.startTime))
+    }))) : [];
+  const nextScheduleWindow = createNextSchedulePeriod(period);
+  const myShifts = publishedShifts
     .filter((shift) => shift.employeeId === activeEmployee.id)
     .sort((a, b) => `${a.date}${a.startTime}`.localeCompare(`${b.date}${b.startTime}`));
   const openCoverage = coverage.filter((request) => request.status === "open" || request.status === "offered");
@@ -728,7 +752,7 @@ export function TheScheduleApp({
     coverage.filter((request) => request.status === "offered").length +
     swaps.filter((request) => request.status === "pending_manager_approval").length;
   const employeeCoverageAlerts = openCoverage.filter((request) => {
-    const shift = shifts.find((item) => item.id === request.shiftId);
+    const shift = allShifts.find((item) => item.id === request.shiftId);
     return shift && request.requestedById !== activeEmployee.id && shift.employeeId !== activeEmployee.id;
   });
   const employeeSwapAlerts = swaps.filter(
@@ -758,11 +782,6 @@ export function TheScheduleApp({
     () => shiftTemplates.filter((template) => template.dayPattern === templatePatternForDate(availabilityForm.date) && template.active),
     [availabilityForm.date]
   );
-  const todayIso = dayProgression.enabled
-    ? dayProgression.currentDate
-    : isDevelopmentTestMode
-      ? dateToIso(new Date(TEST_TODAY))
-      : dateInTimeZone(new Date(), store.timezone);
   const reminderEmailDate = availabilityReminderDate(period.releaseDate);
   const currentPeriodReminderEmails = notifications.filter(
     (notification) => notification.type === "availability_reminder" && notification.id.includes(`:${period.id}:`)
@@ -890,7 +909,7 @@ export function TheScheduleApp({
   }, [activeEmployee.id]);
 
   const applyStoredState = useCallback((stored: Partial<StoredTestState>) => {
-    const storedPeriod = stored.period ?? schedulePeriod;
+    workspaceVersionRef.current = stored.workspaceVersion;
     if (stored.uatRunId) setUatRunId(stored.uatRunId);
     if (stored.people) {
       const hasSignedInPerson = stored.people.some((employee) => employee.email.toLowerCase() === currentUser.email);
@@ -909,9 +928,12 @@ export function TheScheduleApp({
             ]
       );
     }
-    if (stored.period) setPeriod(stored.period);
+    if (stored.period) {
+      setPeriod(stored.period);
+      setAvailabilityForm((current) => ({ ...current, date: current.date >= stored.period!.startDate && current.date <= stored.period!.endDate ? current.date : stored.period!.startDate }));
+    }
     if (stored.shifts) {
-      setShifts(stored.shifts.length > 0 ? stored.shifts : generateDefaultShifts(storedPeriod));
+      setShifts(stored.shifts);
     }
     if (stored.availability) setAvailability(stored.availability);
     if (stored.coverage) setCoverage(stored.coverage);
@@ -929,6 +951,11 @@ export function TheScheduleApp({
 
   useEffect(() => {
     let cancelled = false;
+    // Remove previous releases' workspace caches. Same-origin storage is shared
+    // across logins, so even user-prefixed keys are unsuitable for private records.
+    for (const key of Object.keys(window.localStorage)) {
+      if (key === STORAGE_KEY || key.startsWith(`${STORAGE_KEY}:`)) window.localStorage.removeItem(key);
+    }
 
     async function loadSavedState() {
       try {
@@ -940,21 +967,13 @@ export function TheScheduleApp({
         skipNextPersistenceRef.current = true;
         applyStoredState(stored);
         lastSyncedStateRef.current = workspaceStateFingerprint(stored);
-        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
+
         setPersistenceStatus("saved");
       } catch {
-        const rawState = window.localStorage.getItem(STORAGE_KEY);
-        if (rawState) {
-          try {
-            applyStoredState(JSON.parse(rawState) as Partial<StoredTestState>);
-            setPersistenceStatus("local");
-          } catch {
-            window.localStorage.removeItem(STORAGE_KEY);
-            setPersistenceStatus("error");
-          }
-        } else {
-          setPersistenceStatus("local");
-        }
+        // Never resurrect a previous identity's cached workspace or demo data on auth/network failure.
+        saveBlockedRef.current = true;
+        setPersistenceError("The schedule could not be loaded. Check your connection and sign in again, then reload.");
+        setPersistenceStatus("error");
       } finally {
         if (!cancelled) setHasLoadedStoredState(true);
       }
@@ -973,7 +992,7 @@ export function TheScheduleApp({
     let retryTimer: number | undefined;
 
     async function refreshSavedState() {
-      if (cancelled || document.visibilityState === "hidden" || refreshRequestRef.current || savePendingRef.current) return;
+      if (cancelled || document.visibilityState === "hidden" || refreshRequestRef.current || savePendingRef.current || saveBlockedRef.current || serverActionRef.current) return;
 
       const controller = new AbortController();
       refreshRequestRef.current = controller;
@@ -981,13 +1000,13 @@ export function TheScheduleApp({
         const response = await fetch("/api/test-state", { cache: "no-store", signal: controller.signal });
         if (!response.ok) throw new Error("Unable to refresh server test state.");
         const stored = (await response.json()) as StoredTestState;
-        if (cancelled || controller.signal.aborted) return;
+        if (cancelled || controller.signal.aborted || savePendingRef.current || saveBlockedRef.current || serverActionRef.current) return;
 
         if (hasWorkspaceStateChanged(stored, lastSyncedStateRef.current)) {
           skipNextPersistenceRef.current = true;
           applyStoredState(stored);
           lastSyncedStateRef.current = workspaceStateFingerprint(stored);
-          window.localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
+
         }
         setPersistenceStatus("saved");
       } catch (error) {
@@ -1007,16 +1026,16 @@ export function TheScheduleApp({
 
     window.addEventListener("focus", refreshAfterTabReturn);
     document.addEventListener("visibilitychange", refreshAfterTabReturn);
-    const managerRefreshInterval = isManager
-      ? window.setInterval(() => void refreshSavedState(), MANAGER_WORKSPACE_REFRESH_MS)
-      : undefined;
+    const workspaceRefreshInterval = window.setInterval(
+      () => void refreshSavedState(), isManager ? MANAGER_WORKSPACE_REFRESH_MS : EMPLOYEE_WORKSPACE_REFRESH_MS
+    );
 
     return () => {
       cancelled = true;
       window.removeEventListener("focus", refreshAfterTabReturn);
       document.removeEventListener("visibilitychange", refreshAfterTabReturn);
       if (retryTimer) window.clearTimeout(retryTimer);
-      if (managerRefreshInterval) window.clearInterval(managerRefreshInterval);
+      window.clearInterval(workspaceRefreshInterval);
       refreshRequestRef.current?.abort();
       refreshRequestRef.current = null;
     };
@@ -1049,40 +1068,67 @@ export function TheScheduleApp({
       scheduleHistory
     };
 
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
-
-    const controller = new AbortController();
+    unsavedSnapshotRef.current = snapshot;
+    if (saveBlockedRef.current || serverActionRef.current) return;
+    refreshRequestRef.current?.abort();
     const saveSequence = ++saveSequenceRef.current;
     savePendingRef.current = true;
     setPersistenceStatus("saving");
     const saveTimer = window.setTimeout(() => {
-      saveRequestRef.current = controller;
-      void fetch("/api/test-state", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(snapshot),
-        signal: controller.signal
-      })
-        .then((response) => {
-          if (!response.ok) throw new Error("Unable to save server test state.");
-          lastSyncedStateRef.current = workspaceStateFingerprint(snapshot);
-          setPersistenceStatus(response.headers.get("X-Test-State-Persisted") === "false" ? "local" : "saved");
-        })
-        .catch((error: unknown) => {
-          if (error instanceof DOMException && error.name === "AbortError") return;
-          setPersistenceStatus("local");
-        })
-        .finally(() => {
-          if (saveRequestRef.current === controller) saveRequestRef.current = null;
-          if (saveSequenceRef.current === saveSequence) savePendingRef.current = false;
-        });
+      // Serialize this browser's saves. Aborting fetch does not undo a database write.
+      saveChainRef.current = saveChainRef.current.then(async () => {
+        if (saveBlockedRef.current || serverActionRef.current || saveSequence !== saveSequenceRef.current) return;
+        try {
+          const response = await fetch("/api/test-state", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...snapshot, workspaceVersion: workspaceVersionRef.current })
+          });
+          const result = await response.json() as StoredTestState & { error?: string };
+          if (!response.ok) throw new Error(result.error ?? "The save could not be confirmed. Reload before editing again.");
+          workspaceVersionRef.current = result.workspaceVersion;
+          lastSyncedStateRef.current = workspaceStateFingerprint(result);
+
+          if (saveSequence === saveSequenceRef.current) {
+            unsavedSnapshotRef.current = null;
+            setPersistenceStatus("saved");
+          }
+        } catch (error) {
+          saveBlockedRef.current = true;
+          setPersistenceStatus("error");
+          setPersistenceError(error instanceof Error ? error.message : "The save could not be confirmed. Reload before editing again.");
+        } finally {
+          if (saveSequence === saveSequenceRef.current) savePendingRef.current = false;
+        }
+      });
     }, WORKSPACE_SAVE_DEBOUNCE_MS);
 
-    return () => {
-      window.clearTimeout(saveTimer);
-      controller.abort();
-    };
+    return () => window.clearTimeout(saveTimer);
   }, [auditLog, availability, availabilityDrafts, coverage, dayProgression, hasLoadedStoredState, inviteAcceptances, notifications, people, period, preferences, scheduleHistory, shifts, swaps, uatChecklist, uatIssues, uatRunId]);
+
+  function beginServerAction() {
+    if (savePendingRef.current || saveBlockedRef.current || serverActionRef.current || !workspaceVersionRef.current) {
+      throw new Error("Wait for Saved before continuing. If saving is paused, reload the latest schedule first.");
+    }
+    serverActionRef.current = true;
+    refreshRequestRef.current?.abort();
+    setServerActionPending(true);
+    return { uatRunId, workspaceVersion: workspaceVersionRef.current };
+  }
+
+  function endServerAction() {
+    serverActionRef.current = false;
+    setServerActionPending(false);
+  }
+
+  function acceptServerState(state: StoredTestState) {
+    skipNextPersistenceRef.current = true;
+    applyStoredState(state);
+    lastSyncedStateRef.current = workspaceStateFingerprint(state);
+    unsavedSnapshotRef.current = null;
+
+    setPersistenceStatus("saved");
+  }
 
   useEffect(() => {
     document.documentElement.dataset.theme = currentTheme;
@@ -1735,23 +1781,23 @@ export function TheScheduleApp({
       }));
 
     try {
+      const revision = beginServerAction();
       const response = await fetch("/api/schedule/publish", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ period, shifts: publishShifts })
+        body: JSON.stringify({ ...revision, period, shifts: publishShifts })
       });
       const result = (await response.json()) as { state?: StoredTestState; error?: string };
       if (!response.ok || !result.state) throw new Error(result.error ?? "Unable to publish the schedule.");
 
-      setPeriod(result.state.period);
-      setShifts(result.state.shifts);
-      setNotifications(result.state.notifications);
-      setAuditLog(result.state.auditLog);
+      acceptServerState(result.state);
       setPublishStatus("idle");
       setShowPublishReview(false);
     } catch (error) {
       setPublishStatus("error");
       window.alert(error instanceof Error ? error.message : "Unable to publish the schedule.");
+    } finally {
+      endServerAction();
     }
   }
 
@@ -1821,7 +1867,7 @@ export function TheScheduleApp({
       [activeEmployee.id]: sortUnavailableEntries([...existingSubmitted, ...(current[activeEmployee.id] ?? []), entry])
     }));
     if (activeSubmission?.submittedAt) {
-      setAvailability((current) => current.filter((submission) => submission.userId !== activeEmployee.id));
+      setAvailability((current) => current.filter((submission) => submission.userId !== activeEmployee.id || submission.schedulePeriodId !== period.id));
       addAudit("availability_unsubmitted", "AvailabilitySubmission", activeEmployee.id, `${activeEmployee.name} reopened availability.`, activeEmployee.id);
     }
 
@@ -1855,7 +1901,7 @@ export function TheScheduleApp({
     const sortedUnavailable = sortUnavailableEntries(submittedUnavailable);
 
     setAvailability((current) => {
-      const existing = current.find((submission) => submission.userId === activeEmployee.id);
+      const existing = current.find((submission) => submission.userId === activeEmployee.id && submission.schedulePeriodId === period.id);
       if (!existing) {
         return [
           ...current,
@@ -1871,7 +1917,7 @@ export function TheScheduleApp({
       }
 
       return current.map((submission) =>
-        submission.userId === activeEmployee.id
+        submission.userId === activeEmployee.id && submission.schedulePeriodId === period.id
           ? {
               ...submission,
               submittedAt: new Date().toISOString(),
@@ -1913,7 +1959,7 @@ export function TheScheduleApp({
       ...current,
       [activeEmployee.id]: sortUnavailableEntries(activeSubmission.unavailable.map((entry) => ({ ...entry, id: `draft_${entry.id}_${Date.now()}` })))
     }));
-    setAvailability((current) => current.filter((submission) => submission.userId !== activeEmployee.id));
+    setAvailability((current) => current.filter((submission) => submission.userId !== activeEmployee.id || submission.schedulePeriodId !== period.id));
     addAudit("availability_unsubmitted", "AvailabilitySubmission", activeEmployee.id, `${activeEmployee.name} unsubmitted availability.`, activeEmployee.id);
   }
 
@@ -1927,12 +1973,18 @@ export function TheScheduleApp({
     unsubmitAvailability();
   }
 
+  function assignPublishedShifts(assignments: Record<string, string | undefined>) {
+    const updated = assignWorkspaceShifts({ shifts, scheduleHistory }, assignments);
+    setShifts(updated.shifts);
+    setScheduleHistory(updated.scheduleHistory);
+  }
+
   function employeeHasShiftOnDate(employeeId: string, date: string, ignoredShiftIds: string[] = []) {
-    return shifts.some((shift) => shift.employeeId === employeeId && shift.date === date && !ignoredShiftIds.includes(shift.id));
+    return allShifts.some((shift) => shift.employeeId === employeeId && shift.date === date && !ignoredShiftIds.includes(shift.id));
   }
 
   function coverageBlockReason(request: CoverageRequest, employeeId: string) {
-    const shift = shifts.find((item) => item.id === request.shiftId);
+    const shift = allShifts.find((item) => item.id === request.shiftId);
     if (!shift) return "Shift not found.";
     if (shift.employeeId === employeeId || request.requestedById === employeeId) return "This is already your shift.";
     if (employeeHasShiftOnDate(employeeId, shift.date)) return "You already work that day.";
@@ -1960,8 +2012,8 @@ export function TheScheduleApp({
   }
 
   function swapApprovalBlockReason(request: SwapRequest) {
-    const requesterShift = shifts.find((shift) => shift.id === request.requesterShiftId);
-    const targetShift = shifts.find((shift) => shift.id === request.targetShiftId);
+    const requesterShift = allShifts.find((shift) => shift.id === request.requesterShiftId);
+    const targetShift = allShifts.find((shift) => shift.id === request.targetShiftId);
     if (!requesterShift || !targetShift || !targetShift.employeeId) return "Swap shifts are no longer valid.";
     if (employeeHasShiftOnDate(request.requesterId, targetShift.date, [requesterShift.id])) {
       return `${nameFor(request.requesterId)} already works on the day they would receive.`;
@@ -1979,8 +2031,8 @@ export function TheScheduleApp({
   }
 
   function currentSwapBlockReason() {
-    const requesterShift = shifts.find((shift) => shift.id === swapForm.requesterShiftId);
-    const targetShift = shifts.find((shift) => shift.id === swapForm.targetShiftId);
+    const requesterShift = allShifts.find((shift) => shift.id === swapForm.requesterShiftId);
+    const targetShift = allShifts.find((shift) => shift.id === swapForm.targetShiftId);
     if (!requesterShift || !targetShift) return "";
     return swapBlockReason(requesterShift, targetShift);
   }
@@ -1991,7 +2043,7 @@ export function TheScheduleApp({
       return;
     }
     if (coverage.some((request) => request.shiftId === shiftId && request.status !== "cancelled")) return;
-    const shift = shifts.find((item) => item.id === shiftId);
+    const shift = allShifts.find((item) => item.id === shiftId);
     if (!shift) return;
 
     const request: CoverageRequest = {
@@ -2045,7 +2097,7 @@ export function TheScheduleApp({
       window.alert(blocked);
       return;
     }
-    const shift = shifts.find((item) => item.id === request.shiftId);
+    const shift = allShifts.find((item) => item.id === request.shiftId);
     setCoverage((current) =>
       current.map((request) =>
         request.id === requestId ? { ...request, claimedById: activeEmployee.id, status: "offered" } : request
@@ -2095,9 +2147,7 @@ export function TheScheduleApp({
     );
 
     if (approved && request.claimedById) {
-      setShifts((current) =>
-        current.map((shift) => (shift.id === request.shiftId ? { ...shift, employeeId: request.claimedById } : shift))
-      );
+      assignPublishedShifts({ [request.shiftId]: request.claimedById });
       addNotification(
         "coverage_approved",
         "Coverage change approved",
@@ -2130,8 +2180,8 @@ export function TheScheduleApp({
       window.alert("Accept the invite before requesting a swap.");
       return;
     }
-    const requesterShift = shifts.find((shift) => shift.id === swapForm.requesterShiftId);
-    const targetShift = shifts.find((shift) => shift.id === swapForm.targetShiftId);
+    const requesterShift = allShifts.find((shift) => shift.id === swapForm.requesterShiftId);
+    const targetShift = allShifts.find((shift) => shift.id === swapForm.targetShiftId);
     if (!requesterShift || !targetShift || !targetShift.employeeId) return;
     const blocked = swapBlockReason(requesterShift, targetShift);
     if (blocked) {
@@ -2220,17 +2270,10 @@ export function TheScheduleApp({
     );
 
     if (approved) {
-      setShifts((current) => {
-        const requesterShift = current.find((shift) => shift.id === request.requesterShiftId);
-        const targetShift = current.find((shift) => shift.id === request.targetShiftId);
-        if (!requesterShift || !targetShift) return current;
-
-        return current.map((shift) => {
-          if (shift.id === requesterShift.id) return { ...shift, employeeId: targetShift.employeeId };
-          if (shift.id === targetShift.id) return { ...shift, employeeId: requesterShift.employeeId };
-          return shift;
-        });
-      });
+      const requesterShift = allShifts.find((shift) => shift.id === request.requesterShiftId);
+      const targetShift = allShifts.find((shift) => shift.id === request.targetShiftId);
+      if (!requesterShift || !targetShift) return;
+      assignPublishedShifts({ [requesterShift.id]: targetShift.employeeId, [targetShift.id]: requesterShift.employeeId });
       addNotification("swap_approved", "Shift swap approved", request.requesterId, buildNotificationHtml("Shift swap approved", "Your schedule was updated with the approved swap."));
       addNotification("swap_approved", "Shift swap approved", request.targetEmployeeId, buildNotificationHtml("Shift swap approved", "Your schedule was updated with the approved swap."));
     } else {
@@ -2458,52 +2501,36 @@ export function TheScheduleApp({
     addAudit("employee_invited", "User", employee.id, `Invited ${employee.email} to join ${store.name}.`);
   }
 
-  function resetTestRun() {
+  async function resetTestRun() {
     if (!isManager) return;
-    setMode("manager");
-    setActiveTab("dashboard");
-    setUatRunId(DEFAULT_UAT_RUN_ID);
-    setPeople(employees);
-    setPeriod(schedulePeriod);
-    setShifts(generateDefaultShifts(schedulePeriod));
-    setAvailability([]);
-    setCoverage([]);
-    setSwaps([]);
-    setAuditLog(DEFAULT_AUDIT_LOG);
-    setNotifications([]);
-    setAvailabilityDrafts({});
-    setUatIssues([]);
-    setInviteAcceptances([]);
-    setUatChecklist({});
-    setDayProgression({ enabled: false, currentDate: schedulePeriod.availabilityOpenAt, cycleNumber: 1 });
-    setScheduleHistory([]);
-    setDayProgressionAction(null);
-    setDayProgressionMessage("");
-    setSelectedShiftId(null);
-    setShowOnlyUnassigned(false);
-    setShowIssueReporter(false);
-    setShowPublishReview(false);
-    cancelEditEmployee();
-    window.localStorage.removeItem(STORAGE_KEY);
-    setPersistenceStatus("saving");
-    void fetch("/api/test-state", { method: "DELETE" })
-      .then((response) => {
-        if (!response.ok) throw new Error("Unable to reset server test state.");
-        setPersistenceStatus("saved");
-      })
-      .catch(() => setPersistenceStatus("local"));
+    try {
+      beginServerAction();
+      const response = await fetch("/api/test-state", { method: "DELETE" });
+      const result = await response.json() as StoredTestState & { error?: string };
+      if (!response.ok) throw new Error(result.error ?? "Unable to reset the workspace.");
+      acceptServerState(result);
+      setMode("manager");
+      setActiveTab("dashboard");
+      setSelectedShiftId(null);
+      setShowPublishReview(false);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Unable to reset the workspace.");
+    } finally {
+      endServerAction();
+    }
   }
 
   async function resetProductionUatRun() {
     if (!isManager || cleanResetConfirmation !== CLEAN_RUN_CONFIRMATION) return;
     const confirmed = window.confirm(
-      "This will erase the production UAT run, all invitation/notification history, and every test account's Google link and session. Hockey and Bobby will require new email invitations. Continue?"
+      "This will erase the production UAT run, all invitation/notification history, and every test account's Google link and session. Only m.kodithuwakku803@gmail.com will remain as manager. All employees will require new invitations. Continue?"
     );
     if (!confirmed) return;
 
     setCleanResetStatus("resetting");
     setHasLoadedStoredState(false);
     try {
+      beginServerAction();
       const response = await fetch("/api/uat/reset", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2512,13 +2539,14 @@ export function TheScheduleApp({
       const result = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(result.error ?? "Unable to reset production UAT.");
 
-      window.localStorage.removeItem(STORAGE_KEY);
       window.localStorage.removeItem("the-schedule-theme");
       window.location.assign("/?reset=complete");
     } catch (error) {
       setCleanResetStatus("error");
       setHasLoadedStoredState(true);
       window.alert(error instanceof Error ? error.message : "Unable to reset production UAT.");
+    } finally {
+      endServerAction();
     }
   }
 
@@ -2526,34 +2554,7 @@ export function TheScheduleApp({
     if (!isManager) return;
     setBackupAction("backing_up");
     try {
-      const snapshot: StoredTestState = {
-        uatRunId,
-        people,
-        period,
-        shifts,
-        availability,
-        coverage,
-        swaps,
-        auditLog,
-        notifications,
-        availabilityDrafts,
-        preferences,
-        uatIssues,
-        inviteAcceptances,
-        uatChecklist,
-        dayProgression,
-        scheduleHistory
-      };
-      const saveResponse = await fetch("/api/test-state", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(snapshot)
-      });
-      if (!saveResponse.ok) {
-        const saveResult = (await saveResponse.json().catch(() => ({}))) as { error?: string };
-        throw new Error(saveResult.error ?? "The latest schedule could not be saved before backup.");
-      }
-
+      beginServerAction();
       const response = await fetch("/api/backups/workspace", { method: "POST" });
       const result = (await response.json()) as { backup?: WorkspaceBackupStatus; error?: string };
       if (!response.ok || !result.backup) throw new Error(result.error ?? "Unable to back up the schedule.");
@@ -2562,6 +2563,8 @@ export function TheScheduleApp({
     } catch (error) {
       setBackupAction("error");
       window.alert(error instanceof Error ? error.message : "Unable to back up the schedule.");
+    } finally {
+      endServerAction();
     }
   }
 
@@ -2575,6 +2578,7 @@ export function TheScheduleApp({
     setBackupAction("restoring");
     setHasLoadedStoredState(false);
     try {
+      beginServerAction();
       const response = await fetch("/api/backups/workspace", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -2583,32 +2587,18 @@ export function TheScheduleApp({
       const result = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(result.error ?? "Unable to restore the schedule backup.");
 
-      window.localStorage.removeItem(STORAGE_KEY);
       window.location.assign("/?restored=complete");
     } catch (error) {
       setBackupAction("error");
       setHasLoadedStoredState(true);
       window.alert(error instanceof Error ? error.message : "Unable to restore the schedule backup.");
+    } finally {
+      endServerAction();
     }
   }
 
   function applyDayProgressionState(state: StoredTestState) {
-    setUatRunId(state.uatRunId);
-    setPeople(state.people);
-    setPeriod(state.period);
-    setShifts(state.shifts);
-    setAvailability(state.availability);
-    setCoverage(state.coverage);
-    setSwaps(state.swaps);
-    setAuditLog(state.auditLog);
-    setNotifications(state.notifications);
-    setAvailabilityDrafts(state.availabilityDrafts);
-    setPreferences(state.preferences);
-    setUatIssues(state.uatIssues);
-    setInviteAcceptances(state.inviteAcceptances);
-    setUatChecklist(state.uatChecklist);
-    setDayProgression(state.dayProgression);
-    setScheduleHistory(state.scheduleHistory);
+    acceptServerState(state);
     setSelectedShiftId(state.shifts[0]?.id ?? null);
     setAvailabilityForm((current) => ({ ...current, date: state.period.startDate }));
     setShowPublishReview(false);
@@ -2629,10 +2619,11 @@ export function TheScheduleApp({
     setDayProgressionAction(action);
     setDayProgressionMessage("");
     try {
+      const revision = beginServerAction();
       const response = await fetch("/api/uat/day-progression", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action })
+        body: JSON.stringify({ ...revision, action })
       });
       const result = (await response.json()) as { state?: StoredTestState; message?: string; error?: string };
       if (!response.ok || !result.state) throw new Error(result.error ?? "Unable to advance the schedule test.");
@@ -2643,6 +2634,7 @@ export function TheScheduleApp({
       setDayProgressionMessage(message);
       window.alert(message);
     } finally {
+      endServerAction();
       setDayProgressionAction(null);
     }
   }
@@ -2732,15 +2724,42 @@ export function TheScheduleApp({
     { id: "requests", label: "Coverage", icon: <Repeat2 size={16} /> }
   ];
 
+  const publishedCalendar = viewedPublishedWindow ? (
+    <Section title="Published schedules" icon={<CalendarDays size={18} />}>
+      <Field label="Schedule period">
+        <select className={inputBase} value={viewedPublishedWindow.period.id} onChange={(event) => setSelectedPublishedPeriodId(event.target.value)}>
+          {publishedWindows.map((window) => <option key={window.period.id} value={window.period.id}>{window.period.name}</option>)}
+        </select>
+      </Field>
+      <MobileTeamSchedule people={people} calendarWeeks={publishedWeeks} activeEmployeeId={activeEmployee.id} period={viewedPublishedWindow.period} />
+      <ScheduleGrid title={viewedPublishedWindow.period.name} people={people} calendarWeeks={publishedWeeks} availability={availability} showAssignments className="hidden md:block" />
+    </Section>
+  ) : <div className="rounded-lg border border-line bg-white p-4">Your manager has not published a schedule yet.</div>;
+
   const tabs = mode === "manager" ? managerTabs : employeeTabs;
 
   return (
     <main className={cx("min-h-screen bg-paper text-ink", mode === "employee" && "max-md:overflow-x-hidden")}>
+      {persistenceError && (
+        <div role="alert" className="sticky top-0 z-50 border-b border-danger bg-white p-4 text-sm">
+          <strong>Saving paused.</strong> {persistenceError} Your unsaved changes remain in this tab.
+          <div className="mt-2 flex gap-2">
+            <Button variant="secondary" onClick={() => {
+              if (unsavedSnapshotRef.current) downloadBlob(new Blob([JSON.stringify(unsavedSnapshotRef.current, null, 2)], { type: "application/json" }), "unsaved-schedule.json");
+            }}>Download unsaved changes</Button>
+            <Button onClick={() => {
+              if (!unsavedSnapshotRef.current || window.confirm("Discard unsaved changes in this tab and load the latest saved schedule? Download them first if you need a copy.")) window.location.reload();
+            }}>Reload latest schedule</Button>
+            <Button variant="secondary" onClick={() => void signOut({ callbackUrl: "/" })}>Sign out</Button>
+          </div>
+        </div>
+      )}
+      <fieldset disabled={Boolean(persistenceError) || serverActionPending || !hasLoadedStoredState} className="contents">
       {mode === "employee" && (
         <MobileEmployeeHeader
           employee={activeEmployee}
-          period={period}
-          status={period.status}
+          period={viewedPublishedWindow?.period ?? period}
+          status={viewedPublishedWindow?.period.status ?? period.status}
           currentTheme={currentTheme}
           onToggleTheme={() => setThemePreference(currentTheme === "dark" ? "light" : "dark")}
           onSignOut={() => void signOut({ callbackUrl: "/" })}
@@ -3035,7 +3054,7 @@ export function TheScheduleApp({
         {activeTab === "dashboard" && mode === "manager" && (
           <div className="grid gap-4">
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <Metric label="Test date" value={TEST_TODAY} detail={testStep} tone={period.status === "published" ? "good" : "warn"} />
+              <Metric label={dayProgression.enabled ? "Simulated date" : "Today"} value={shortDayLabel(todayIso)} detail={testStep} tone={period.status === "published" ? "good" : "warn"} />
               <Metric
                 label="Availability"
                 value={`${schedulableSubmittedIds.size}/${schedulableEmployees.length}`}
@@ -3064,11 +3083,18 @@ export function TheScheduleApp({
             </Section>
 
             <ScheduleGrid
+              title={period.name}
               people={people}
               calendarWeeks={calendarWeeks}
               availability={availability}
               showAssignments
             />
+            {publishedCalendar}
+            <Section title="Schedule windows" icon={<CalendarDays size={18} />}>
+              <p className="text-sm leading-6">{period.status === "published"
+                ? `${nextScheduleWindow.name} opens for availability automatically on ${nextScheduleWindow.availabilityOpenAt}. Reminders: ${availabilityReminderDate(nextScheduleWindow.releaseDate)}. Availability deadline: ${nextScheduleWindow.availabilityDeadlineAt}. Publish by ${nextScheduleWindow.releaseDate}.`
+                : `Preparing ${period.name}. Availability opens ${period.availabilityOpenAt}, reminders start ${availabilityReminderDate(period.releaseDate)}, submissions close ${period.availabilityDeadlineAt}, and publication is due ${period.releaseDate}. Published schedules remain available above.`}</p>
+            </Section>
             <Section title="Activity" icon={<ShieldCheck size={18} />}>
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 {missingAvailability.length > 0 && (
@@ -3235,7 +3261,7 @@ export function TheScheduleApp({
           <Section title="Availability Tracker" icon={<Clock size={18} />}>
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               {activeEmployees.map((employee) => {
-                const submission = availability.find((item) => item.userId === employee.id);
+                const submission = periodAvailability.find((item) => item.userId === employee.id);
                 const inviteStatus = inviteStatusFor(employee);
                 return (
                   <div key={employee.id} className="rounded-lg border border-line p-4">
@@ -3639,8 +3665,7 @@ export function TheScheduleApp({
 
         {activeTab === "team" && mode === "employee" && (
           <>
-            <MobileTeamSchedule people={people} calendarWeeks={calendarWeeks} activeEmployeeId={activeEmployee.id} period={period} />
-            <ScheduleGrid people={people} calendarWeeks={calendarWeeks} availability={availability} showAssignments className="hidden md:block" />
+            {publishedCalendar}
           </>
         )}
 
@@ -3662,7 +3687,7 @@ export function TheScheduleApp({
                   </div>
                 )}
                 {openCoverage.map((request) => {
-                  const shift = shifts.find((item) => item.id === request.shiftId);
+                  const shift = allShifts.find((item) => item.id === request.shiftId);
                   if (!shift) return null;
                   const isMine = shift.employeeId === activeEmployee.id;
                   const canOffer = mode === "employee" && !isMine && request.requestedById !== activeEmployee.id && request.status === "open";
@@ -3736,10 +3761,10 @@ export function TheScheduleApp({
                   <Field label="Swap with">
                     <select className={inputBase} value={swapForm.targetShiftId} onChange={(event) => setSwapForm({ ...swapForm, targetShiftId: event.target.value })}>
                       <option value="">Select shift</option>
-                      {shifts
+                      {publishedShifts
                         .filter((shift) => shift.employeeId && shift.employeeId !== activeEmployee.id)
                         .map((shift) => {
-                          const requesterShift = shifts.find((item) => item.id === swapForm.requesterShiftId);
+                          const requesterShift = allShifts.find((item) => item.id === swapForm.requesterShiftId);
                           const blocked = requesterShift ? swapBlockReason(requesterShift, shift) : "";
                           return (
                             <option key={shift.id} value={shift.id} disabled={Boolean(blocked)}>
@@ -3768,8 +3793,8 @@ export function TheScheduleApp({
                   </div>
                 )}
                 {swaps.map((request) => {
-                  const requesterShift = shifts.find((shift) => shift.id === request.requesterShiftId);
-                  const targetShift = shifts.find((shift) => shift.id === request.targetShiftId);
+                  const requesterShift = allShifts.find((shift) => shift.id === request.requesterShiftId);
+                  const targetShift = allShifts.find((shift) => shift.id === request.targetShiftId);
                   const targetCanRespond = mode === "employee" && request.targetEmployeeId === activeEmployee.id && request.status === "pending_employee_response";
                   const swapBlock = request.status === "pending_employee_response" || request.status === "pending_manager_approval" ? swapApprovalBlockReason(request) : "";
                   return (
@@ -3865,8 +3890,8 @@ export function TheScheduleApp({
                         <div className="font-black">Need first-time logins and an empty run?</div>
                         <p className="mt-1 text-sm leading-6 text-ink/70">
                           Use Clean production UAT run below before marking Step 1. It backs up the schedule first, clears all test
-                          progress and sessions. Manager and Employee A start active; Employees B and C must accept fresh email
-                          invitations. Do not reset in the middle of this guide.
+                          progress and sessions. Only your manager account remains; every employee must accept a fresh email
+                          invitation. Do not reset in the middle of this guide.
                         </p>
                       </div>
                     </div>
@@ -4216,9 +4241,9 @@ export function TheScheduleApp({
                       <div className="font-black">This is a destructive production reset.</div>
                       <p className="mt-2 text-sm leading-6 text-ink/70">
                         It clears the workspace, checklist, invitations, normalized schedule data, notification deduplication,
-                        audit logs, Google account links, and active sessions. The manager and UAlberta employee start active.
-                        Hockey, Bobby, and any extra test invitees are removed from Neon when they have no other store membership,
-                        so you can invite them again through the real email flow.
+                        audit logs, Google account links, and active sessions. Only m.kodithuwakku803@gmail.com remains as manager.
+                        All employee memberships are removed, and users with no other store membership are deleted.
+                        The schedule starts empty with suggested dates based on today; invite employees and create shifts when ready.
                       </p>
                     </div>
                   </div>
@@ -4673,6 +4698,7 @@ export function TheScheduleApp({
           </div>
         </nav>
       )}
+      </fieldset>
     </main>
   );
 }

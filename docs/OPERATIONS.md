@@ -77,6 +77,14 @@ The project must be linked to the correct Git repository and production branch `
 
 [Vercel Cron Jobs](https://vercel.com/docs/cron-jobs/manage-cron-jobs) sends the production authorization header using `CRON_SECRET`. A browser request without that bearer token must return `401`.
 
+## Automatic schedule windows
+
+The daily job opens the next semi-monthly draft when its availability opening date arrives. It first takes a protected snapshot and uses a version-checked update; repeat invocations do not recreate an existing draft. Real clock mode is required. An unfinished draft remains in place for manager action.
+
+For the published September 15–30, 2026 schedule, October 1–14 opens September 23, reminders start September 27, availability closes September 28, and the planned publication date is September 30. The manager must assign, review, and publish. The next October 15–31 window opens October 7 after the preceding schedule is published. September's published shifts and requests remain accessible while October is prepared.
+
+Inspect the cron response's `windows` entries and the `schedule_window_opened` audit record. A missed reminder invocation can catch up through the deadline; provider failures still require investigation of their recorded delivery claim. Opening a window does not automatically send publication emails.
+
 ## Database migrations
 
 ### Routine migration workflow
@@ -256,7 +264,7 @@ For broader database loss, Neon's [instant restore](https://neon.com/docs/introd
 | Action | Use when | Result |
 | --- | --- | --- |
 | Restore latest backup | Current workspace was accidentally damaged | Replaces workspace with the one protected snapshot; keeps identity database/session structures except run invalidation behavior |
-| Clean production UAT run | A new first-login test must begin from zero | Clears UAT and schedule artifacts, invitations, notification/audit data, OAuth links and sessions; starts manager/Employee A active and Hockey/Bobby awaiting new invitations |
+| Clean production UAT run | A new first-login test must begin from zero | Clears UAT and schedule artifacts, invitations, notification/audit data, OAuth links and sessions; retains only the owner manager, with no shifts/history and fresh suggested dates; every employee needs a new invitation |
 | Start next schedule cycle | The current schedule was published and testing should continue normally | Archives current publication, opens the next semi-monthly draft, enables simulated date |
 
 Never use clean reset to recover an accidental midweek edit. Never use next-cycle progression merely to erase an unfinished draft.
@@ -282,7 +290,7 @@ Publication and reminder operations use deterministic claims. Repeating the same
 5. Confirm `EMAIL_FROM` uses a verified Resend domain.
 6. Confirm the recipient email matches the active membership/workspace identity.
 7. Check Resend logs, suppression/bounce status, spam, and mailbox rules.
-8. For reminders, verify the Edmonton date is exactly release minus three days and inspect duplicate counts.
+8. For reminders, verify the Edmonton date is between release minus three days and the availability deadline and inspect duplicate counts.
 9. For publication, verify the period is published and the recipient is active.
 10. Do not delete notification claims merely to resend; diagnose and use a controlled new test period or repair process.
 
@@ -334,7 +342,7 @@ Publication and reminder operations use deterministic claims. Repeating the same
 5. If a critical correct state was lost, evaluate the single protected backup.
 6. Record a UAT issue with both accounts, timestamps, and actions.
 
-Whole-workspace persistence is the known concurrency limitation. Normalize operations into transactional rows before relying on uncontrolled simultaneous editing at larger scale.
+Whole-workspace writes now compare the database version and run ID atomically. A conflicting browser receives 409 and pauses saving; download unsaved changes if needed, reload the latest schedule, and reapply them. Never automatically retry an old full snapshot. Server notification appends retry by recomputing from the latest state. Normalized operations remain useful to reduce conflict frequency.
 
 ## Cron incidents
 
@@ -382,6 +390,8 @@ Do not automatically reverse a production migration. First determine whether the
 For every incident, record the production URL, commit/deployment, Edmonton time, account, action, expected result, actual result, screenshots, relevant request/status, and recovery action.
 
 ## Production readiness checklist
+
+Use [Launch verification](./LAUNCH_VERIFICATION.md) for the current release gates, required evidence, and local-versus-hosted verification status.
 
 - [ ] Intended `main` commit pushed and deployed.
 - [ ] Vercel deployment is `Ready` for the exact commit.

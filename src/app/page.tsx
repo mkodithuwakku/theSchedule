@@ -50,7 +50,7 @@ export default async function Home({
   return (
     <TheScheduleApp
       currentUser={access}
-      activeMemberEmails={activeMemberEmails}
+      activeMemberEmails={access.role === "manager" ? activeMemberEmails : [access.email]}
     />
   );
 }

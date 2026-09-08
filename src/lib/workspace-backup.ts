@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { dateInTimeZone } from "@/lib/schedule-rollout";
-import { createDefaultTestState, normalizeTestState } from "@/lib/test-state";
+import { createCleanRunTestState, normalizeTestState } from "@/lib/test-state";
 import type { StoredTestState } from "@/lib/test-state-shared";
 import type { WorkspaceBackupReason, WorkspaceBackupStatus } from "@/lib/workspace-backup-shared";
 
@@ -86,7 +86,7 @@ export async function overwriteWorkspaceBackupWithClient(
     select: { data: true, version: true, updatedAt: true }
   });
   if (!workspace) {
-    const defaultState = createDefaultTestState();
+    const defaultState = createCleanRunTestState(`uat_${randomUUID()}`);
     workspace = await database.storeWorkspaceState.upsert({
       where: { storeId },
       update: {},

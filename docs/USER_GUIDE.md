@@ -84,7 +84,7 @@ The link expires after 14 days and may only be accepted once. The employee must 
 
 If an invited email is incorrect, select `Edit`, correct the address, and save while the person still shows `Invited`. Then select `Resend invite`. The app replaces the old token, renews the invitation for 14 days, sends the corrected address a fresh email, and records the attempt in Notifications. Once the employee is active, the pending-invitation edit and resend actions are no longer available.
 
-After a clean production UAT reset, use this flow to invite `m.kodithuwakku.hockey@gmail.com` and `bobby.cazby@gmail.com`. The manager and `kodithuw@ualberta.ca` remain the two initially active accounts.
+After a clean reset, only `m.kodithuwakku803@gmail.com` remains as manager. Use this flow to invite every employee, including UAlberta if using the test accounts.
 
 ### Accept an invitation as the employee
 
@@ -228,6 +228,12 @@ Publication sends one consolidated email per active member containing that perso
 5. On a phone, confirm the same information is readable without clipped names.
 
 Only a published period should be treated as the official schedule.
+
+## Preparing the next schedule
+
+The app opens the next draft automatically on its availability opening date. For October 1–14, 2026, this is September 23. Submit fresh availability for the dates shown; a September submission does not count as an October submission. The reminder is September 27 and the deadline is September 28. The manager completes assignments and publishes by the planned September 30 release date.
+
+While October is being prepared, `My shifts` and `Team schedule` continue showing published September shifts. Use the `Published schedules` selector when multiple publications are available. Coverage and swaps remain attached to their original published shifts. A draft is never automatically assigned or published. The manager dashboard shows both the work period and published schedules.
 
 ## Coverage workflow
 

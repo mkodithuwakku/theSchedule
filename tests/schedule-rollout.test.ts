@@ -43,12 +43,13 @@ function rolloutState() {
   return state;
 }
 
-test("availability reminder is due exactly three Edmonton calendar days before release", () => {
+test("availability reminders start three Edmonton days before release and catch up through the deadline", () => {
   const state = rolloutState();
   assert.equal(availabilityReminderDate(state.period.releaseDate), "2026-08-17");
   assert.equal(isAvailabilityReminderDue(state.period, new Date("2026-08-17T16:00:00.000Z"), timeZone), true);
   assert.equal(isAvailabilityReminderDue(state.period, new Date("2026-08-16T16:00:00.000Z"), timeZone), false);
-  assert.equal(isAvailabilityReminderDue(state.period, new Date("2026-08-18T16:00:00.000Z"), timeZone), false);
+  assert.equal(isAvailabilityReminderDue(state.period, new Date("2026-08-18T16:00:00.000Z"), timeZone), true);
+  assert.equal(isAvailabilityReminderDue(state.period, new Date("2026-08-19T16:00:00.000Z"), timeZone), false);
 });
 
 test("Edmonton date calculation follows local midnight across daylight-saving time", () => {

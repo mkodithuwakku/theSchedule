@@ -1,6 +1,6 @@
-import type { SchedulePeriod } from "@/lib/demo-data";
+import type { SchedulePeriod, Shift } from "@/lib/demo-data";
 import { generateDefaultShifts } from "@/lib/demo-data";
-import { addIsoDays, availabilityReminderDate } from "@/lib/schedule-rollout";
+import { addIsoDays, availabilityReminderDate, dateInTimeZone } from "@/lib/schedule-rollout";
 import type { ArchivedSchedule, StoredTestState } from "@/lib/test-state-shared";
 
 export const MAX_SCHEDULE_HISTORY = 6;
@@ -127,4 +127,52 @@ export function nextReminderDate(state: StoredTestState) {
 
 export function simulatedDateAsEdmontonNoon(value: string) {
   return new Date(`${value}T18:00:00.000Z`);
+}
+
+/** Published windows remain usable while a later period is being prepared. */
+export function publishedScheduleWindows(state: Pick<StoredTestState, "period" | "shifts" | "scheduleHistory">) {
+  return [
+    ...(state.period.status === "published" ? [{ period: state.period, shifts: state.shifts }] : []),
+    ...state.scheduleHistory.filter((entry) => entry.period.status !== "draft")
+  ].sort((a, b) => a.period.startDate.localeCompare(b.period.startDate));
+}
+
+export function allWorkspaceShifts(state: Pick<StoredTestState, "shifts" | "scheduleHistory">): Shift[] {
+  return [...new Map([...state.shifts, ...state.scheduleHistory.flatMap((entry) => entry.shifts)]
+    .map((shift) => [shift.id, shift])).values()];
+}
+
+export function assignWorkspaceShifts<T extends Pick<StoredTestState, "shifts" | "scheduleHistory">>(
+  state: T, assignments: Record<string, string | undefined>
+): T {
+  const update = (shift: Shift) => Object.hasOwn(assignments, shift.id)
+    ? { ...shift, employeeId: assignments[shift.id] } : shift;
+  return { ...state, shifts: state.shifts.map(update),
+    scheduleHistory: state.scheduleHistory.map((entry) => ({ ...entry, shifts: entry.shifts.map(update) })) };
+}
+
+/** Idempotent daily production transition. Never discards an unfinished draft or uses the test clock. */
+export function openDueScheduleCycle(state: StoredTestState, now = new Date(), timeZone = "America/Edmonton"): StoredTestState {
+  if (state.dayProgression.enabled || state.period.status !== "published") return state;
+  const nextPeriod = createNextSchedulePeriod(state.period);
+  const today = dateInTimeZone(now, timeZone);
+  if (today < nextPeriod.availabilityOpenAt) return state;
+
+  const next = beginNextScheduleCycle(state, now.toISOString());
+  const periodIds = new Set([next.period.id, ...next.scheduleHistory.map((entry) => entry.period.id)]);
+  const shiftIds = new Set(allWorkspaceShifts(next).map((shift) => shift.id));
+  return {
+    ...next,
+    // Old availability and requests still govern shifts in the running published schedule.
+    availability: state.availability.filter((entry) => periodIds.has(entry.schedulePeriodId)),
+    coverage: state.coverage.filter((entry) => shiftIds.has(entry.shiftId)),
+    swaps: state.swaps.filter((entry) => shiftIds.has(entry.requesterShiftId) && (!entry.targetShiftId || shiftIds.has(entry.targetShiftId))),
+    dayProgression: { enabled: false, currentDate: today, cycleNumber: state.dayProgression.cycleNumber + 1 },
+    auditLog: [{
+      id: `audit_rollover_${next.period.id}`, actorId: "system", action: "schedule_window_opened",
+      entityType: "SchedulePeriod", entityId: next.period.id,
+      summary: `Opened ${next.period.name} for availability and scheduling. Published shifts and requests remain available.`,
+      createdAt: now.toISOString()
+    }, ...state.auditLog]
+  };
 }

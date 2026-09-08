@@ -35,23 +35,23 @@ The browser interface is the supported client. This reference is for maintenance
 | `PUT /api/backups/workspace` | Manager | Verify and restore the protected backup |
 | `POST /api/uat/day-progression` | Manager | Start a new cycle, advance date, jump to reminder, or stop simulation |
 | `POST /api/uat/reset` | Manager | Destructively restore a first-login UAT baseline |
-| `GET /api/cron/schedule-rollout` | Bearer secret | Ensure daily backups and process due reminder emails |
+| `GET /api/cron/schedule-rollout` | Bearer secret | Open due schedule windows, ensure backups, and process reminders |
 
 ## Workspace state
 
 ### `GET /api/test-state`
 
-Returns the normalized workspace and header `X-Test-State-Persisted: true`. Employees receive the shared schedule needed by the UI, but their subsequent writes remain server-filtered.
+Returns the normalized workspace, database `workspaceVersion`, and headers `X-Test-State-Persisted: true` and `Cache-Control: private, no-store`. Employee GET and PUT responses include only own availability/drafts/preferences, published team shifts without internal notes, relevant coverage/swaps, and own notifications. Coworker emails, draft shifts, audit logs, UAT issues/results, and invite acceptances are excluded.
 
 ### `PUT /api/test-state`
 
-The request body is the proposed workspace. Its `uatRunId` must match the current database workspace. A mismatch returns `409` with an instruction to refresh.
+The request body is the proposed workspace. Its `uatRunId` and integer `workspaceVersion` must match the current database workspace. A missing or stale version or changed run returns `409`. The comparison and version increment are atomic; a successful response includes the new revision.
 
 For a manager, the normalized proposal is persisted. For an employee, the server reconstructs a safe workspace containing only permitted changes to that employee's availability, theme preference, coverage/swap participation, issues, and related log entries.
 
 ### `DELETE /api/test-state`
 
-Manager-only development/workspace reset. It first writes a `pre_reset` protected backup and then replaces the workspace with the default state. The full first-login reset is `/api/uat/reset` and clears much more data.
+Manager-only development/workspace reset; returns 403 in Production. It first writes a `pre_reset` protected backup and then replaces the workspace with an empty owner workspace and new run ID. The full first-login reset is `/api/uat/reset` and clears much more data.
 
 ## Invitations
 
@@ -156,6 +156,8 @@ Supported values:
 
 The response includes updated state, a user-facing message, and delivery counts when applicable. Invalid transitions return `409`.
 
+Publishing and day-progression POST requests must also include the `uatRunId` and `workspaceVersion` returned by the latest workspace response. Stale requests return 409 before making schedule changes or sending publication emails.
+
 ## Full UAT reset
 
 ### `POST /api/uat/reset`
@@ -168,7 +170,7 @@ Request:
 }
 ```
 
-This manager-only action backs up the workspace, clears UAT and normalized scheduling artifacts, removes Auth.js accounts and sessions, and creates the September 15-30, 2026 rollout period with a September 12 release date and a new run ID. The manager and UAlberta employee memberships start active. Hockey, Bobby, and orphaned extra test invitees are removed from Neon so the manager can test user creation, invitation email delivery, and acceptance from zero. Users with another store membership are preserved. Every open browser must sign in again.
+This manager-only action backs up the workspace, clears scheduling/UAT/invitation/notification/audit artifacts, and removes affected Auth.js account links and sessions. Only `m.kodithuwakku803@gmail.com` retains an active manager membership. Every employee membership is removed; orphaned users are deleted while users with another store membership are preserved. The empty workspace contains no shifts or history and suggests future semi-monthly dates based on the reset date in Edmonton. No normalized schedule period is created. Every employee needs a new invitation. A new run ID and incremented version invalidate stale writes.
 
 ## Scheduled rollout
 
@@ -180,4 +182,4 @@ Required header:
 Authorization: Bearer <CRON_SECRET>
 ```
 
-The route runs backup and reminder processing together. Its response reports stores processed, snapshots written, attempted/sent/queued/failed deliveries, and duplicates skipped. A direct browser visit without the header must return `401` and perform no work.
+The route first opens any due next schedule draft using the real store date, after protecting the current workspace with a backup. It retains published shifts and requests and skips simulated clocks or unfinished drafts. It then runs backup and reminder processing together. The `windows` result lists each store, whether a window opened, and its active period ID. Reminders are due from release minus three days through the availability deadline, with delivery-claim deduplication. Its response reports stores processed, snapshots written, attempted/sent/queued/failed deliveries, and duplicates skipped. A direct browser visit without the header must return `401` and perform no work.

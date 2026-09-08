@@ -77,15 +77,16 @@ export const GUIDED_UAT_PHASES: GuidedUatPhase[] = [
       },
       {
         id: "auth-employee-first-login",
-        title: "Sign in the initially active employee",
+        title: "Invite Employee A and sign in",
         actor: "Employee A",
         account: "kodithuw@ualberta.ca",
         instructions: [
-          "Open a separate private window or browser profile so Google does not replace the manager session.",
+          "As manager, invite kodithuw@ualberta.ca from Employees and confirm the invitation email arrives.",
+          "Open that invitation in a separate private window or browser profile and accept it with the matching Google account.",
           "Sign in as Employee A: kodithuw@ualberta.ca.",
           "Confirm the browser shows Employee A's own name and Employee Dashboard."
         ],
-        expected: "Employee A signs in successfully while the two accounts awaiting invitation remain unable to access the schedule."
+        expected: "Employee A signs in after invitation acceptance. Every other uninvited employee remains unable to access the schedule."
       },
       {
         id: "employee-identity-binding",

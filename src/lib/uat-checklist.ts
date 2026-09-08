@@ -801,23 +801,23 @@ export const UAT_CHECKLIST_GROUPS: UatChecklistGroup[] = [
         id: "persistence-simultaneous-availability",
         title: "Two employees save near-simultaneously",
         actor: "Manager + employee",
-        steps: ["Submit different availability from two employee browsers within a few seconds.", "Refresh both and the manager tracker."],
-        expected: "Both submissions remain; neither employee's save erases the other's data.",
+        steps: ["Submit different availability from two employee browsers within a few seconds.", "If a browser shows Saving paused, download its unsaved changes, reload, and resubmit. Refresh both and the manager tracker."],
+        expected: "A stale save is rejected visibly. After reload and resubmission, both submissions remain; neither save erases the other.",
         critical: true
       },
       {
         id: "persistence-manager-employee-race",
         title: "Manager and employee save near-simultaneously",
         actor: "Manager + employee",
-        steps: ["Change a shift as manager while an employee submits availability.", "Wait for Saved and refresh both."],
-        expected: "Both authorized changes survive without schedule or availability rollback.",
+        steps: ["Change a shift as manager while an employee submits availability.", "If one save is rejected with 409, reload that browser and reapply its change. Wait for Saved and refresh both."],
+        expected: "A conflicting save pauses with a recovery message; reapplying it after reload preserves both changes.",
         critical: true
       },
       {
         id: "persistence-employee-sanitization",
         title: "Employee write cannot alter manager-owned fields",
         actor: "Employee",
-        steps: ["Keep an employee page open while manager changes the schedule.", "Have the employee save an allowed action and refresh."],
+        steps: ["Keep an employee page open while manager changes the schedule.", "Have the employee save an allowed action and refresh, recovering from a conflict if prompted.", "Inspect employee GET and PUT responses: only own availability/drafts/preferences, published team shifts, relevant requests, and own notifications are present. Coworker emails, draft shifts, audit logs, UAT issues and results must be absent."],
         expected: "Employee availability/request persists but cannot overwrite people, period, shifts, manager approvals, or another employee's data.",
         critical: true
       },
@@ -826,7 +826,7 @@ export const UAT_CHECKLIST_GROUPS: UatChecklistGroup[] = [
         title: "Temporary network failure is visible and recoverable",
         actor: "Manager + employee",
         steps: ["Temporarily disable network, make a harmless change, then reconnect.", "Refresh after verifying server state."],
-        expected: "The app shows Local/Error rather than falsely claiming Saved; recovery does not silently overwrite newer server data.",
+        expected: "The app pauses saving, retains unsaved changes for download, and requires an explicit reload; it never claims Saved for a rejected write.",
         critical: true
       },
       {
@@ -987,7 +987,7 @@ export const UAT_CHECKLIST_GROUPS: UatChecklistGroup[] = [
         title: "Reset clears all UAT artifacts",
         actor: "Manager",
         steps: ["Create invitations, checklist results, availability, draft assignments, publish logs, coverage, swaps, notifications, issues, and theme preferences.", "Run the clean reset and sign back in."],
-        expected: "All artifacts are gone; the seeded people, store configuration, blank pre-release workspace, and empty checklist remain.",
+        expected: "All artifacts are gone; only the owner manager, store configuration, an empty draft with fresh suggested dates, and an empty checklist remain.",
         critical: true,
         cleanRunRecommended: true
       },
@@ -996,11 +996,11 @@ export const UAT_CHECKLIST_GROUPS: UatChecklistGroup[] = [
         title: "Reset restores first-login and invitation behavior",
         actor: "Manager + employee",
         steps: [
-          "After reset, sign in as the manager and UAlberta employee.",
-          "Confirm Hockey and Bobby are denied before invitation.",
-          "Invite both from Employees, accept both emailed links with the matching Google accounts, and sign in."
+          "After reset, sign in as m.kodithuwakku803@gmail.com and confirm it is the only manager and person.",
+          "Confirm UAlberta, Hockey, Bobby, and any other former employees are denied before invitation.",
+          "Invite the employees from Employees, accept their emailed links with the matching Google accounts, and sign in."
         ],
-        expected: "Initially active accounts link successfully, uninvited accounts are blocked, and both freshly invited accounts activate without duplicate users.",
+        expected: "The owner signs in successfully, all uninvited accounts are blocked, and invited employees activate without duplicate users.",
         critical: true,
         cleanRunRecommended: true
       },

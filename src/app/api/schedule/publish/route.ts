@@ -5,9 +5,11 @@ import { getCurrentAccess, normalizeEmail } from "@/lib/access";
 import { prisma } from "@/lib/prisma";
 import { sendPublishedScheduleNotifications } from "@/lib/schedule-notifications";
 import { getScheduleBlockingIssues } from "@/lib/schedule-builder";
-import { readWorkspaceState, writeWorkspaceState } from "@/lib/workspace-state";
+import { assertWorkspaceRevision, WorkspaceConflictError, StaleUatRunError, updateWorkspaceState, readWorkspaceState, writeWorkspaceState } from "@/lib/workspace-state";
 
 type PublishRequest = {
+  uatRunId?: string;
+  workspaceVersion?: number;
   period?: SchedulePeriod;
   shifts?: Shift[];
 };
@@ -25,6 +27,11 @@ export async function POST(request: Request) {
   }
 
   const existing = await readWorkspaceState(access.storeId);
+  try {
+    assertWorkspaceRevision(existing, body);
+  } catch (error) {
+    return NextResponse.json({ error: (error as Error).message }, { status: 409 });
+  }
   if (body.period.id !== existing.period.id) {
     return NextResponse.json({ error: "The schedule period changed. Refresh before publishing." }, { status: 409 });
   }
@@ -61,12 +68,20 @@ export async function POST(request: Request) {
     summary: `Published ${publishedPeriod.name}.`,
     createdAt: publishedAt
   };
-  const publishedState = await writeWorkspaceState(access.storeId, {
-    ...existing,
-    period: publishedPeriod,
-    shifts: publishedShifts,
-    auditLog: [publishAudit, ...existing.auditLog]
-  });
+  let publishedState;
+  try {
+    publishedState = await writeWorkspaceState(access.storeId, {
+      ...existing,
+      period: publishedPeriod,
+      shifts: publishedShifts,
+      auditLog: [publishAudit, ...existing.auditLog]
+    });
+  } catch (error) {
+    if (error instanceof WorkspaceConflictError || error instanceof StaleUatRunError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
+    throw error;
+  }
 
   await prisma.auditLog.create({
     data: {
@@ -94,13 +109,13 @@ export async function POST(request: Request) {
     createdAt: publishedAt
   }));
   const deliveryIds = new Set(deliveryNotifications.map((notification) => notification.id));
-  const finalState = await writeWorkspaceState(access.storeId, {
-    ...publishedState,
+  const finalState = await updateWorkspaceState(access.storeId, publishedState.uatRunId, (latest) => ({
+    ...latest,
     notifications: [
       ...deliveryNotifications,
-      ...publishedState.notifications.filter((notification) => !deliveryIds.has(notification.id))
+      ...latest.notifications.filter((notification) => !deliveryIds.has(notification.id))
     ]
-  });
+  }));
 
   return NextResponse.json({
     state: finalState,

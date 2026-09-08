@@ -86,7 +86,8 @@ export function availabilityReminderDate(releaseDate: string) {
 }
 
 export function isAvailabilityReminderDue(period: SchedulePeriod, now: Date, timeZone: string) {
-  return period.status === "draft" && dateInTimeZone(now, timeZone) === availabilityReminderDate(period.releaseDate);
+  const today = dateInTimeZone(now, timeZone);
+  return period.status === "draft" && today >= availabilityReminderDate(period.releaseDate) && today <= period.availabilityDeadlineAt;
 }
 
 export function activeRolloutRecipients(state: StoredTestState, members: RolloutMember[]) {

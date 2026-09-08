@@ -9,7 +9,7 @@ import {
 } from "@/lib/schedule-progression";
 import { sendDueAvailabilityRemindersForStore } from "@/lib/schedule-notifications";
 import { overwriteWorkspaceBackup } from "@/lib/workspace-backup";
-import { readWorkspaceState, writeWorkspaceState } from "@/lib/workspace-state";
+import { assertWorkspaceRevision, readWorkspaceState, writeWorkspaceState } from "@/lib/workspace-state";
 
 type DayProgressionAction = "start_next_cycle" | "advance_day" | "jump_to_reminder" | "stop_simulation";
 
@@ -20,10 +20,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Only active managers can control day-progression testing." }, { status: 403 });
   }
 
-  const body = (await request.json()) as { action?: DayProgressionAction };
+  const body = (await request.json()) as { action?: DayProgressionAction; uatRunId?: string; workspaceVersion?: number };
   const state = await readWorkspaceState(access.storeId);
 
   try {
+    assertWorkspaceRevision(state, body);
     if (body.action === "start_next_cycle") {
       await overwriteWorkspaceBackup(access.storeId, "manual");
       const nextState = beginNextScheduleCycle(state);

@@ -7,10 +7,10 @@ import {
   createNextSchedulePeriod,
   nextReminderDate
 } from "@/lib/schedule-progression";
-import { createCleanRunTestState } from "@/lib/test-state";
+import { createDefaultTestState } from "@/lib/test-state";
 
 function publishedState() {
-  const state = createCleanRunTestState("progression_run", new Date("2026-08-17T18:00:00.000Z"));
+  const state = createDefaultTestState("progression_run");
   state.period = { ...state.period, status: "published", publishedAt: "2026-09-12T16:00:00.000Z" };
   state.availability = [
     {
