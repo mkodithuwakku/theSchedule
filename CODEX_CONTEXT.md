@@ -42,7 +42,7 @@ The current product goal is hosted, authenticated UAT with Google identities and
 - `prisma/schema.prisma` contains the production-facing data model, including Store and StoreMembership for future multi-store expansion.
 - `StoreWorkspaceState` is the current hosted shared-state bridge while schedule workflows are moved into normalized Prisma models.
 - `public/men-are-from-mars-logo.png` is the current store logo asset.
-- `docs/LAUNCH_VERIFICATION.md` lists the current release gates and evidence needed. The owner confirmed the hosted configuration/email/cron/multi-device/restore checks on September 8. Independent read-only inspection found September 15–30 published with 36 filled shifts (34 employee assignments and two named manual covers), four active members, four submissions, no blocking issues, and real time enabled. Preserve that live schedule; do not reset it.
+- `docs/LAUNCH_VERIFICATION.md` lists the current release gates and evidence needed. The owner confirmed the hosted configuration/email/cron/multi-device/restore checks on September 8. The owner clarified that the published September schedule was test data and requested a blank slate for real employee onboarding. A live clean reset was completed September 8 at 21:18 UTC, preserving a verified pre-reset backup. Workspace version 175 contains only the two default managers, an empty September 15–30 draft, no shifts/history/availability/invitations, and the real clock. Three old test employee users were removed. Do not restore or repopulate the test schedule; invite real employees and build the actual schedule.
 - `README.md` is the user-facing project overview and setup guide.
 - `PRODUCTION_SETUP.md` is the hosted UAT checklist and manager domain/payment handoff.
 - `docs/README.md` is the documentation index. Its architecture, API, user, UAT, and operations guides are the maintained project reference and should be updated with relevant behavior changes.
@@ -127,6 +127,10 @@ Multi-store support is planned but not active yet. When it is added:
 ## Default managers
 
 `m.kodithuwakku803@gmail.com` and `a.t.morris03@gmail.com` have manager access and can work shifts using their own employee view. `src/lib/default-managers.ts` defines the accounts retained by clean resets. Owner alerts continue using the original owner email.
+
+## Real employee onboarding baseline
+
+The September 8 clean reset cleared all test sessions and Google account links, so both managers sign in again. The empty September 15–30 draft opens availability September 8, deadline September 12, planned publication September 14. No schedule has been published. Existing pre-reset tabs cannot save over the new run. Do not reset again once real invitations or scheduling begin unless the user requests it.
 
 ## Production schedule lifecycle
 

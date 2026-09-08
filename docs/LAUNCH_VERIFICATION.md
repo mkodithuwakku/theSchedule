@@ -12,7 +12,9 @@ Updated September 8, 2026. Record the deployed commit, deployment URL, Edmonton 
 - Local automated tests cover concurrent manager/employee writes, version rejection, notification append races, employee response filtering and redacted coverage offers, and the default-manager reset transaction. They use controlled database adapters, not Neon.
 - The local isolated browser check uses mocked API responses to verify the empty dashboard, serialized saves, and visible 409 recovery controls. It does not test Google authentication or hosted persistence.
 
-On September 8 the owner confirmed that the hosted configuration, email/cron delivery, multi-device workflows, and backup restoration checks work. These are owner-confirmed results; the agent did not repeat destructive reset/restore or send emails. The agent independently read the live workspace: September 15–30 is published, all 36 shifts are filled (34 employee assignments and two named manual covers), four active members have submitted availability, no blocking scheduling issues were found, and simulated time is disabled. Preserve this operational schedule.
+On September 8 the owner confirmed that hosted configuration, email/cron delivery, multi-device workflows, and backup restoration work. The owner subsequently clarified that the published 36-shift September schedule was test data and requested an empty setup before inviting real employees.
+
+At 21:18 UTC the live clean-reset transaction completed. A checksum-verified `pre_reset` backup retains the old workspace. Live workspace version 175 contains only the two active default managers, a September 15–30 draft, zero shifts, zero availability, zero requests/history/invitations, and real clock mode. The three test employee users, old invitations, normalized test period, sessions, and OAuth links were removed. The run ID changed to invalidate stale tabs. Managers sign in again, invite the real employees, collect availability, and build/publish the actual schedule. Do not restore the test publication as operational data.
 
 Local result for this implementation: **59/59 automated tests passed; lint, TypeScript, production build, and diff checks passed.** Browser checks confirmed zero-shift owner-only rendering, successive revisions with at most one in-flight save, visible conflict recovery, and removal of legacy workspace caches.
 
@@ -24,7 +26,7 @@ The isolated mobile browser check successfully submitted October availability wh
 
 ## Required hosted checks
 
-The owner has confirmed the hosted checks below. Keep this table as the repeatable release checklist. The new version protection, employee filtering, and automatic period transition are covered by local regression tests; hosted authenticated regression checks should use the deployed release. Do not reset the populated September schedule to repeat UAT.
+The owner has confirmed the hosted checks below. Keep this table as the repeatable release checklist. The new version protection, employee filtering, and automatic period transition are covered by local regression tests; hosted authenticated regression checks should use the deployed release. The initial blank production setup has now been created. Preserve subsequent real onboarding and scheduling work.
 
 | Gate | What to verify | Evidence required to pass |
 | --- | --- | --- |
@@ -48,8 +50,11 @@ The owner has confirmed the hosted checks below. Keep this table as the repeatab
 
 | Date (Edmonton) | Behavior |
 | --- | --- |
-| September 15–30 | Existing published schedule remains available; 36 filled shifts (34 employee assignments and two named manual covers) verified read-only. |
-| September 23 | Daily cron opens the October 1–14 draft and fresh availability collection. September shifts, availability, coverage, and swaps remain available. |
+| September 8 | Empty September 15–30 draft; invite real staff and collect fresh availability. |
+| September 12 | September availability deadline. |
+| September 14 | Planned manager publication of the actual September schedule. |
+| September 15–30 | First real operating period, once the manager publishes. |
+| September 23 | Once September is published, the daily cron opens the October 1–14 draft and fresh availability collection. September shifts, availability, coverage, and swaps remain available. |
 | September 27 | October availability reminder becomes due; a missed invocation can catch up through September 28. Delivery claims prevent duplicate sends. |
 | September 28 | October availability deadline. |
 | September 30 | Planned October publication date; the manager must finish assignments, review, and publish. |
