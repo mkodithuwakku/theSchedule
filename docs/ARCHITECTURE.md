@@ -92,6 +92,10 @@ sequenceDiagram
 7. `/api/schedule/publish` independently rejects unfilled shifts, duplicate same-day employee assignments, availability conflicts, and invalid times before persisting or emailing.
 8. Publication notifications use deterministic keys so retries do not create duplicate messages.
 
+Shift-template unavailability compares the saved start/end times with the candidate shift; overlapping hours alone do not block a different shift. Full-day entries block every shift that date, and custom ranges block any overlapping shift. These rules are shared by manual assignment, auto-complete, publication validation, coverage, and swaps.
+
+The client and notification API share `shift-notification-policy.ts`: assignment, unassignment, removal, and time-update notifications are suppressed before publication. The API checks persisted period status and rejects mismatched period IDs by suppressing delivery, so an older tab cannot send draft-edit emails. Publication still sends one consolidated message per active member.
+
 ### Coverage
 
 1. The assigned employee opens a published shift and requests coverage.

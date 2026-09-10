@@ -120,7 +120,7 @@ Availability is a two-stage action: first add entries to the draft, then submit 
 5. Select `1. Add unavailable day`.
 6. Select `2. Submit draft`.
 
-Only the selected template is unavailable; other non-overlapping work may still be assignable.
+Only a shift matching the selected template's submitted start and end times is unavailable. Other shifts remain assignable even when their hours overlap: for example, selecting Close (3:15–9:15 PM) does not block Open (9:45 AM–3:45 PM). This also applies to Mid and Sunday shifts. Use `Custom time range` when the employee cannot work during particular hours regardless of shift.
 
 ### Submit a custom unavailable time
 
@@ -181,6 +181,8 @@ Auto-complete uses store templates and availability rules. It assigns each emplo
 5. Wait for `Saved`.
 
 An unavailable employee or an employee already working another shift that day cannot be assigned. If nobody eligible remains, enter a name in `Manual cover` for that shift.
+
+Assigning, reassigning, unassigning, deleting, or changing shifts in a draft does not email employees. Publishing sends each active member one consolidated schedule email. Changes made after publication continue to send shift-change notifications.
 
 ### Add a shift
 

@@ -113,6 +113,8 @@ Managers may select recipients and notification types. Employees may only produc
 
 The response includes the workspace notification, resolved recipient, and provider result. Provider status is `sent`, `queued`, or `failed`.
 
+Shift assignment, unassignment, removal, and update emails require the persisted current period to be published. An optional `schedulePeriodId` must match that period for these emails. Otherwise the route returns HTTP 200 with `suppressed: true` and a notification with status `suppressed`, without calling the email provider or saving a notification. Older clients without a period ID are checked against the current persisted period. Other notification workflows retain their existing behavior. Draft edits do not create client notifications; publication uses the consolidated publication endpoint.
+
 ## Backups
 
 ### `GET /api/backups/workspace`

@@ -106,8 +106,11 @@ Pass condition: all normal entry types persist and the manager sees four complet
 5. Add, edit, and remove one temporary shift.
 6. Clear one assignment, verify `Unassigned`, and repair it.
 7. Wait for `Saved`, refresh, and compare the finished draft.
+8. For an employee who selected Close as unavailable, assign Open on that date even though it overlaps by 30 minutes. Confirm Close is still blocked. Repeat across weekend Open/Mid/Close and Sunday templates, clearing the previous assignment between checks because each employee may work only one shift per day.
+9. Confirm custom-range overlap and full-day restrictions still block assignments.
+10. Confirm draft assignment, reassignment, unassignment, time edits, and deletions send no shift emails and create no shift-change notifications.
 
-Pass condition: the complete draft remains intact, readable, and availability-aware after refresh.
+Pass condition: the complete draft remains intact, readable, and availability-aware after refresh; different overlapping templates remain assignable and draft edits send no shift emails. Run these setup/edit checks on isolated test data, not the live employee schedule.
 
 ### Phase 5: publish
 

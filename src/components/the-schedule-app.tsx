@@ -29,6 +29,7 @@ import { allWorkspaceShifts, assignWorkspaceShifts, publishedScheduleWindows, cr
 import type { AppAccess } from "@/lib/access-shared";
 import { actionNotificationEmail, ownerAlertEmail } from "@/lib/email-templates";
 import { availabilityReminderDate, dateInTimeZone } from "@/lib/schedule-rollout";
+import { shouldSuppressShiftNotification } from "@/lib/shift-notification-policy";
 import {
   type AuditEntry,
   type AvailabilitySubmission,
@@ -1391,6 +1392,8 @@ export function TheScheduleApp({
     directRecipient?: { to: string; recipientName: string },
     sendEmail = true
   ) {
+    if (shouldSuppressShiftNotification(type, period.status)) return;
+
     const id = `note_${Date.now()}_${Math.random().toString(16).slice(2)}`;
     setNotifications((current) => [
       {
@@ -1414,6 +1417,7 @@ export function TheScheduleApp({
         userId,
         to: directRecipient?.to,
         recipientName: directRecipient?.recipientName,
+        schedulePeriodId: period.id,
         type,
         subject,
         html:
@@ -1427,11 +1431,13 @@ export function TheScheduleApp({
     })
       .then((response) => {
         if (!response.ok) throw new Error("Unable to queue Gmail notification.");
-        return response.json() as Promise<{ notification: NotificationEntry }>;
+        return response.json() as Promise<{ notification: NotificationEntry; suppressed?: boolean }>;
       })
       .then((result) => {
         setNotifications((current) =>
-          current.map((entry) => (entry.id === id ? { ...entry, status: result.notification.status } : entry))
+          result.suppressed
+            ? current.filter((entry) => entry.id !== id)
+            : current.map((entry) => (entry.id === id ? { ...entry, status: result.notification.status } : entry))
         );
       })
       .catch(() => {

@@ -324,7 +324,7 @@ export const UAT_CHECKLIST_GROUPS: UatChecklistGroup[] = [
         title: "Submit shift-specific unavailability",
         actor: "Employee",
         steps: ["Choose a weekday, weekend, and Sunday in separate runs.", "Select Shift-specific and confirm available template choices."],
-        expected: "Only templates valid for that day appear and the saved start/end times match the selected template.",
+        expected: "Only templates valid for that day appear and the saved start/end times match the selected template. Other templates remain assignable even when their hours overlap.",
         critical: true
       },
       {
@@ -446,8 +446,8 @@ export const UAT_CHECKLIST_GROUPS: UatChecklistGroup[] = [
         id: "builder-conflict-warning",
         title: "Availability conflict is visible",
         actor: "Manager",
-        steps: ["Assign an employee to a shift overlapping submitted unavailability."],
-        expected: "The assignment is visibly flagged and Publish Confirmation includes a conflict warning.",
+        steps: ["Try assigning an employee to their unavailable shift template, a full unavailable day, or a shift overlapping a custom unavailable time range."],
+        expected: "The conflicting assignment is blocked. A different shift template is still allowed despite overlapping hours; any existing conflicting assignment blocks publication.",
         critical: true
       },
       {
@@ -455,7 +455,7 @@ export const UAT_CHECKLIST_GROUPS: UatChecklistGroup[] = [
         title: "Add, edit, and remove a shift block",
         actor: "Manager",
         steps: ["Add a shift on a calendar date.", "Change its date/time/assignee.", "Remove it."],
-        expected: "Each change persists, totals recalculate, and removing an assigned shift records activity/notification."
+        expected: "Each change persists and totals recalculate. Draft edits record activity without shift-change notifications or emails; employees receive a consolidated email on publication."
       },
       {
         id: "builder-clear-assignments",

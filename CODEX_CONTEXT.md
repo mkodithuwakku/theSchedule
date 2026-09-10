@@ -138,9 +138,18 @@ The September 8 clean reset cleared all test sessions and Google account links, 
 - October 1–14 opens September 23; reminder September 27, availability deadline September 28, planned manager publication September 30. October 15–31 opens October 7 if the previous period is published.
 - Automatic rollover never assigns or publishes shifts and never discards an unfinished draft. Keep `dayProgression.enabled` false in production.
 - Employees see published windows while the manager prepares a later draft. Coverage/swaps update the appropriate historical or current publication. Availability counts and edits belong to the work period; older submissions remain for ongoing shift validation.
-- Local suite: 59 passing tests, including real-clock transitions, repeated/missed cron invocations, preserved September workflows, and distinct October notification keys. Browser checks use isolated mocked persistence.
+- Local suite: 64 passing tests, including real-clock transitions, repeated/missed cron invocations, preserved September workflows, distinct October notification keys, shift-specific availability, and draft email suppression. Browser checks use isolated mocked persistence.
 
 ## Next Likely Work
+
+### September 10 bug fixes
+
+- Real employees have now been invited and some have submitted availability. Preserve all live accounts, invitations, and workspace data; do not reset or reseed.
+- Shift-specific availability matches the selected shift's submitted start/end times, allowing other overlapping templates (Open/Mid/Close and Sunday). Custom time ranges still use overlap and full-day entries still block the whole day. Existing submissions work without a migration or resubmission.
+- Draft assignment/unassignment/removal/time changes do not create notifications or send emails. The shared `shift-notification-policy.ts` is applied in the client and notification API, including old open tabs. Publishing still sends consolidated emails; published shift-change emails remain enabled.
+- Regression tests cover all template pairs, custom/full-day restrictions, unchanged submitted data, auto-assignment/publication validation, and the real notification route with mocked authentication, database, and email dependencies.
+- Validation: 64 tests, lint, typecheck, and production build passed again before the user-authorized commit/push/deployment. Tests/build used an unreachable local database URL and disabled email credentials.
+- Production release protection: full Neon snapshot `snap-dawn-cherry-a6za6t20` (`pre-shift-fixes-2026-09-10`) was created and listed successfully on September 10 at 23:41:42 UTC, from production branch `br-rough-sound-a6svpd1g` in project `restless-bar-72431784`. This includes accounts and invitations as well as workspace data. The read-only pre-deploy baseline was workspace version 399, 7 workspace people, 3 availability submissions, and 5 invitation records. No reset, seed, migration, or restore is part of this release.
 
 Before broader real-user UAT:
 

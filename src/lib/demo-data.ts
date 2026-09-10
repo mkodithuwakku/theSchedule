@@ -119,7 +119,7 @@ export type NotificationEntry = {
   userId?: string;
   type: string;
   subject: string;
-  status: "queued" | "sent" | "failed";
+  status: "queued" | "sent" | "failed" | "suppressed";
   createdAt: string;
 };
 
@@ -388,6 +388,14 @@ export function isEmployeeUnavailable(
   return submission.unavailable.some((entry) => {
     if (entry.date !== shift.date) return false;
     if (entry.allDay || entry.unavailableType === "full_day") return true;
+    if (entry.unavailableType === "shift_template") {
+      // Template selections block that shift, not the overlap with another shift.
+      // Prefer the submitted times so existing submissions keep their meaning.
+      const template = shiftTemplates.find((item) => item.id === entry.shiftTemplateId);
+      const startTime = entry.startTime ?? template?.startTime;
+      const endTime = entry.endTime ?? template?.endTime;
+      return shift.startTime === startTime && shift.endTime === endTime;
+    }
     if (!entry.startTime || !entry.endTime) return false;
     return rangesOverlap(shift.startTime, shift.endTime, entry.startTime, entry.endTime);
   });

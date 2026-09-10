@@ -5,6 +5,7 @@ import { getAppBaseUrl } from "@/lib/app-url";
 import { actionNotificationEmail, ownerAlertEmail } from "@/lib/email-templates";
 import { appendWorkspaceNotification, readWorkspaceState } from "@/lib/workspace-state";
 import type { NotificationEntry } from "@/lib/demo-data";
+import { shouldSuppressShiftNotification } from "@/lib/shift-notification-policy";
 
 type TestEmailRequest = {
   id?: string;
@@ -16,6 +17,7 @@ type TestEmailRequest = {
   html?: string;
   skipLog?: boolean;
   ownerAlert?: boolean;
+  schedulePeriodId?: string;
 };
 
 export async function POST(request: Request) {
@@ -41,6 +43,25 @@ export async function POST(request: Request) {
   }
 
   const state = await readWorkspaceState(access.storeId);
+  // Check persisted publication state, including requests from older open tabs.
+  // A request for a different period must not inherit this period's published status.
+  const notificationPeriodStatus = body.schedulePeriodId && body.schedulePeriodId !== state.period.id
+    ? "draft"
+    : state.period.status;
+  if (shouldSuppressShiftNotification(body.type ?? "", notificationPeriodStatus)) {
+    return NextResponse.json({
+      suppressed: true,
+      reason: "Shift changes are emailed only for the current published schedule.",
+      notification: {
+        id: body.id ?? `note_${Date.now()}`,
+        userId: body.userId,
+        type: body.type,
+        subject: body.subject,
+        status: "suppressed",
+        createdAt: new Date().toISOString()
+      }
+    });
+  }
   const stateRecipient = state.people.find((person) => person.id === body.userId);
   const fallbackRecipient = state.people.find((person) => person.role === "manager") ?? state.people[0];
   const recipient = body.ownerAlert
