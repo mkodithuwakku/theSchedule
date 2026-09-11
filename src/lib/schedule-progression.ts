@@ -7,13 +7,13 @@ export const MAX_SCHEDULE_HISTORY = 6;
 
 function semiMonthlyPeriodEnd(startDate: string) {
   const [year, month, day] = startDate.split("-").map(Number);
-  if (day <= 14) return `${startDate.slice(0, 8)}14`;
+  if (day <= 15) return `${startDate.slice(0, 8)}15`;
 
   const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
   return `${startDate.slice(0, 8)}${String(lastDay).padStart(2, "0")}`;
 }
 
-function periodLabel(startDate: string, endDate: string) {
+export function periodLabel(startDate: string, endDate: string) {
   const formatter = new Intl.DateTimeFormat("en-US", {
     month: "long",
     day: "numeric",

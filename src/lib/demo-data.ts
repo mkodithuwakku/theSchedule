@@ -185,9 +185,9 @@ export const shiftTemplates: ShiftTemplate[] = [
 ];
 
 export const schedulePeriod: SchedulePeriod = {
-  id: "period_sep_15_30_2026",
-  name: "September 15-30, 2026",
-  startDate: "2026-09-15",
+  id: "period_sep_16_30_2026",
+  name: "September 16-30, 2026",
+  startDate: "2026-09-16",
   endDate: "2026-09-30",
   releaseDate: "2026-09-12",
   availabilityOpenAt: "2026-09-05",
@@ -263,10 +263,10 @@ export const availabilitySubmissions: AvailabilitySubmission[] = [
 ];
 
 export const initialShifts: Shift[] = [
-  { id: "shift_1", schedulePeriodId: schedulePeriod.id, date: "2026-09-15", startTime: "09:45", endTime: "15:45", employeeId: "emp_manager", originalEmployeeId: "emp_manager", originalStartTime: "09:45", originalEndTime: "15:45" },
-  { id: "shift_2", schedulePeriodId: schedulePeriod.id, date: "2026-09-15", startTime: "15:15", endTime: "21:15", employeeId: "emp_bobby", originalEmployeeId: "emp_bobby", originalStartTime: "15:15", originalEndTime: "21:15" },
-  { id: "shift_3", schedulePeriodId: schedulePeriod.id, date: "2026-09-16", startTime: "09:45", endTime: "15:45", employeeId: "emp_ualberta", originalEmployeeId: "emp_ualberta", originalStartTime: "09:45", originalEndTime: "15:45" },
-  { id: "shift_4", schedulePeriodId: schedulePeriod.id, date: "2026-09-16", startTime: "15:15", endTime: "21:15", employeeId: "emp_hockey", originalEmployeeId: "emp_hockey", originalStartTime: "15:15", originalEndTime: "21:15" },
+  { id: "shift_1", schedulePeriodId: schedulePeriod.id, date: "2026-09-16", startTime: "09:45", endTime: "15:45", employeeId: "emp_manager", originalEmployeeId: "emp_manager", originalStartTime: "09:45", originalEndTime: "15:45" },
+  { id: "shift_2", schedulePeriodId: schedulePeriod.id, date: "2026-09-16", startTime: "15:15", endTime: "21:15", employeeId: "emp_bobby", originalEmployeeId: "emp_bobby", originalStartTime: "15:15", originalEndTime: "21:15" },
+  { id: "shift_3", schedulePeriodId: schedulePeriod.id, date: "2026-09-18", startTime: "09:45", endTime: "15:45", employeeId: "emp_ualberta", originalEmployeeId: "emp_ualberta", originalStartTime: "09:45", originalEndTime: "15:45" },
+  { id: "shift_4", schedulePeriodId: schedulePeriod.id, date: "2026-09-18", startTime: "15:15", endTime: "21:15", employeeId: "emp_hockey", originalEmployeeId: "emp_hockey", originalStartTime: "15:15", originalEndTime: "21:15" },
   { id: "shift_5", schedulePeriodId: schedulePeriod.id, date: "2026-09-17", startTime: "09:45", endTime: "15:45", employeeId: "emp_bobby", originalEmployeeId: "emp_bobby", originalStartTime: "09:45", originalEndTime: "15:45" },
   { id: "shift_6", schedulePeriodId: schedulePeriod.id, date: "2026-09-17", startTime: "15:15", endTime: "21:15", employeeId: "emp_manager", originalEmployeeId: "emp_manager", originalStartTime: "15:15", originalEndTime: "21:15" },
   { id: "shift_7", schedulePeriodId: schedulePeriod.id, date: "2026-09-19", startTime: "09:45", endTime: "15:45", employeeId: "emp_ualberta", originalEmployeeId: "emp_ualberta", originalStartTime: "09:45", originalEndTime: "15:45" },

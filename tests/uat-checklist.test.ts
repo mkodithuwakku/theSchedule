@@ -85,7 +85,7 @@ test("a clean production run is empty and suggests future dates from the reset d
     assert(cleanRun.period.availabilityOpenAt < cleanRun.period.availabilityDeadlineAt);
     assert(cleanRun.period.availabilityDeadlineAt < cleanRun.period.releaseDate);
     assert(cleanRun.period.releaseDate < cleanRun.period.startDate);
-    assert(["01", "15"].includes(cleanRun.period.startDate.slice(-2)));
+    assert(["01", "16"].includes(cleanRun.period.startDate.slice(-2)));
     assert.equal(cleanRun.period.status, "draft");
     assert.deepEqual(cleanRun.shifts, []);
     assert.deepEqual(cleanRun.availability, []);

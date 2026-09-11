@@ -8,7 +8,7 @@ import {
 import { autoAssignDraftShifts, getScheduleBlockingIssues } from "../src/lib/schedule-builder";
 
 const person = { id: "employee", name: "Employee", email: "employee@example.com", role: "employee" as const, active: true };
-const dates = { weekday: "2026-09-15", weekend: "2026-09-18", sunday: "2026-09-20" };
+const dates = { weekday: "2026-09-16", weekend: "2026-09-18", sunday: "2026-09-20" };
 
 function submission(entry: Partial<Unavailability>): AvailabilitySubmission[] {
   return [{
@@ -45,7 +45,7 @@ test("custom time ranges still block overlapping shifts; full days block every s
     assert.equal(isEmployeeUnavailable(person.id, shift, fullDay), true);
   }
   assert.equal(isEmployeeUnavailable(person.id, { date: dates.weekday, startTime: "09:45", endTime: "15:15" }, custom), false);
-  assert.equal(isEmployeeUnavailable(person.id, { ...shifts[0], date: "2026-09-16" }, fullDay), false);
+  assert.equal(isEmployeeUnavailable(person.id, { ...shifts[0], date: "2026-09-17" }, fullDay), false);
   assert.equal(isEmployeeUnavailable("another-employee", shifts[0], fullDay), false);
 });
 

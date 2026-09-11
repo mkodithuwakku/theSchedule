@@ -98,8 +98,8 @@ async function main() {
   const period = await prisma.schedulePeriod.upsert({
     where: { id: "period_next" },
     update: {
-      name: "September 15-30, 2026",
-      startDate: new Date("2026-09-15T12:00:00.000Z"),
+      name: "September 16-30, 2026",
+      startDate: new Date("2026-09-16T12:00:00.000Z"),
       endDate: new Date("2026-09-30T12:00:00.000Z"),
       releaseDate: new Date("2026-09-12T12:00:00.000Z"),
       availabilityOpenAt: new Date("2026-09-05T12:00:00.000Z"),
@@ -109,8 +109,8 @@ async function main() {
     create: {
       id: "period_next",
       storeId: store.id,
-      name: "September 15-30, 2026",
-      startDate: new Date("2026-09-15T12:00:00.000Z"),
+      name: "September 16-30, 2026",
+      startDate: new Date("2026-09-16T12:00:00.000Z"),
       endDate: new Date("2026-09-30T12:00:00.000Z"),
       releaseDate: new Date("2026-09-12T12:00:00.000Z"),
       availabilityOpenAt: new Date("2026-09-05T12:00:00.000Z"),

@@ -233,7 +233,7 @@ Only a published period should be treated as the official schedule.
 
 ## Preparing the next schedule
 
-The app opens the next draft automatically on its availability opening date. For October 1–14, 2026, this is September 23. Submit fresh availability for the dates shown; a September submission does not count as an October submission. The reminder is September 27 and the deadline is September 28. The manager completes assignments and publishes by the planned September 30 release date.
+The app opens the next draft automatically on its availability opening date. For October 1–15, 2026, this is September 23. Submit fresh availability for the dates shown; a September submission does not count as an October submission. The reminder is September 27 and the deadline is September 28. The manager completes assignments and publishes by the planned September 30 release date.
 
 While October is being prepared, `My shifts` and `Team schedule` continue showing published September shifts. Use the `Published schedules` selector when multiple publications are available. Coverage and swaps remain attached to their original published shifts. A draft is never automatically assigned or published. The manager dashboard shows both the work period and published schedules.
 

@@ -23,7 +23,7 @@ The current product goal is hosted, authenticated UAT with Google identities and
 - `src/lib/test-state.ts` normalizes the JSON-backed test-state payload.
 - `src/lib/guided-uat.ts` defines the ordered, click-by-click normal schedule journey shown first in Test Plan, including progression into the next schedule.
 - `src/lib/uat-checklist.ts` defines the 119-flow advanced production UAT plan and validates persisted manual results; guided steps reuse matching advanced IDs.
-- `src/lib/schedule-progression.ts` creates semi-monthly schedule periods (days 1-14, then day 15 through month-end), advances the shared manager-controlled UAT date, and keeps bounded six-period publication history.
+- `src/lib/schedule-progression.ts` creates semi-monthly schedule periods (days 1-15, then day 16 through month-end), advances the shared manager-controlled UAT date, and keeps bounded six-period publication history.
 - `src/lib/uat-reset.ts` performs the manager-only clean-run reset, clears OAuth/session and UAT artifacts, retains both default managers, removes all employee memberships and orphaned users, and creates a new run identifier.
 - `src/lib/auth.ts` configures Google/Auth.js and permits verified Google identities to link to pre-seeded or invited user records on first login.
 - `src/lib/access.ts` resolves the signed-in Google account to an active Neon store membership.
@@ -135,10 +135,20 @@ The September 8 clean reset cleared all test sessions and Google account links, 
 ## Production schedule lifecycle
 
 - `src/lib/schedule-lifecycle.ts` runs before daily reminders. It snapshots and atomically opens the next draft on its availability opening date, retaining ongoing published shifts and requests.
-- October 1–14 opens September 23; reminder September 27, availability deadline September 28, planned manager publication September 30. October 15–31 opens October 7 if the previous period is published.
+- October 1–15 opens September 23; reminder September 27, availability deadline September 28, planned manager publication September 30. October 16–31 opens October 8 if the previous period is published.
 - Automatic rollover never assigns or publishes shifts and never discards an unfinished draft. Keep `dayProgression.enabled` false in production.
 - Employees see published windows while the manager prepares a later draft. Coverage/swaps update the appropriate historical or current publication. Availability counts and edits belong to the work period; older submissions remain for ongoing shift validation.
 - Local suite: 64 passing tests, including real-clock transitions, repeated/missed cron invocations, preserved September workflows, distinct October notification keys, shift-specific availability, and draft email suppression. Browser checks use isolated mocked persistence.
+
+## September 11 period boundary correction
+
+- Scheduling periods now cover days 1–15 and 16–month-end, including February and leap years. The production lifecycle and UAT progression use the same corrected generator.
+- The live September draft was corrected at 21:07 UTC from September 15–30 to September 16–30, workspace version 501 → 502. Its existing ID `period_20260915_20260930` intentionally remains unchanged so all availability references remain valid. Do not rename that ID to match the corrected start date.
+- All 5 submitted availability records (including any September 15 entries), saved availability drafts, 7 workspace people, 5 invitation records, acceptance records, and all 36 remaining shifts/assignments/edited times were preserved. Two draft shifts on September 15 were removed from the active draft and retained in the backup. No emails, reset, seed, schema migration, or restore were run.
+- Preserve the manager's existing collection/publication dates: availability opened September 7, deadline September 13, planned release September 15. These differ from the original September 8 reset baseline described above.
+- The explicit repair script is `scripts/correct-schedule-period.ts`; dry run is the default. Applying requires the store, period ID and expected workspace version, saves a manual backup atomically, and rejects concurrent changes. It leaves published/history periods unchanged. It is not run automatically at build, startup, or on reads.
+- Recovery: Neon snapshot creation hit the plan's snapshot limit, so the September 10 full Neon snapshot was preserved. A checksum-verified, mode-0600 export of all 20 application tables was saved outside the repo at `/Users/mkodi/.codex/backups/the-schedule/2026-09-11-period-boundary-before.json` (SHA-256 `01e5ba09cb22c8d81e84abfee9513b940a456d1d864b5c54c969d531018e4564`). The protected manual Neon workspace backup contains version 501 with all 38 original shifts and checksum `8a4898eb3668e4b3700a8aa97683b0de1447a41ac92e01b3595c37dad08090db`.
+- Validation: 69 automated tests, lint, typecheck and production build passed with an unreachable test database and disabled email. Regression coverage includes 96 consecutive periods across four years, leap February, availability linkage, retained edits and rejection of stale pre-correction versions.
 
 ## Next Likely Work
 

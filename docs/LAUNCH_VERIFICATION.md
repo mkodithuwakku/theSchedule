@@ -18,6 +18,12 @@ At 21:18 UTC the live clean-reset transaction completed. A checksum-verified `pr
 
 Local result for this implementation: **59/59 automated tests passed; lint, TypeScript, production build, and diff checks passed.** Browser checks confirmed zero-shift owner-only rendering, successive revisions with at most one in-flight save, visible conflict recovery, and removal of legacy workspace caches.
 
+## September 11 period correction
+
+The live draft was corrected at 21:07 UTC, version 501 → 502: September 16–30, with the same period ID, all 5 availability submissions, all availability drafts, 7 workspace people and 5 invitations preserved. All 36 shifts on September 16–30 retain their assignments and edited times; the two September 15 draft shifts are retained in the pre-correction backup. The deadline remains September 13 and planned release September 15. No emails were sent by the correction.
+
+All 18 tables outside the workspace/backup pair were compared against the full pre-correction export. Accounts, sessions, memberships, invitations and notification logs were unchanged. The manual workspace backup's SHA-256 checksum was verified, including the original shifts and availability. Local verification passed 69 tests, lint, TypeScript and production build, including four years of contiguous 1–15 / 16–month-end periods.
+
 ## Deployed release evidence
 
 Commit `77b194e4f9ea009901f2c12ff9e3c66f1bcad782` reached Ready in Vercel production as `dpl_BFQc2o8aUdV4fv5mVjam74G2Jqfs` on September 8. The canonical alias is `https://mafm-schedule.vercel.app`. Post-deployment checks returned HTTP 200 for the Google sign-in page, HTTP 401 for a signed-out workspace request, and HTTP 401 for unsigned cron access; the browser reported no runtime errors. The live workspace remained at version 173 with its September publication intact. A follow-up clarifies the availability period label on mobile.
@@ -53,13 +59,13 @@ The owner has confirmed the hosted checks below. Keep this table as the repeatab
 | September 8 | Empty September 15–30 draft; invite real staff and collect fresh availability. |
 | September 12 | September availability deadline. |
 | September 14 | Planned manager publication of the actual September schedule. |
-| September 15–30 | First real operating period, once the manager publishes. |
-| September 23 | Once September is published, the daily cron opens the October 1–14 draft and fresh availability collection. September shifts, availability, coverage, and swaps remain available. |
+| September 16–30 | First real operating period, once the manager publishes. |
+| September 23 | Once September is published, the daily cron opens the October 1–15 draft and fresh availability collection. September shifts, availability, coverage, and swaps remain available. |
 | September 27 | October availability reminder becomes due; a missed invocation can catch up through September 28. Delivery claims prevent duplicate sends. |
 | September 28 | October availability deadline. |
 | September 30 | Planned October publication date; the manager must finish assignments, review, and publish. |
 | October 1 | Employees use the published October schedule. No automatic assignment or publication occurs. |
-| October 7 | If October 1–14 has been published, the cron opens October 15–31. |
+| October 8 | If October 1–15 has been published, the cron opens October 16–31. |
 
 The cron is configured for 16:00 UTC daily (10:00 Edmonton during September/October). Window opening is idempotent, stays on the real clock, and does not replace an unfinished draft. A protected snapshot is taken before rollover. Published schedules remain selectable while a later draft is prepared. Availability submissions are scoped to their period. Local browser verification uses simulated September 23 with mocked persistence to exercise the employee and manager views without changing production data.
 

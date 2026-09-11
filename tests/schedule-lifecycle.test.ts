@@ -16,9 +16,9 @@ function september() {
 }
 const noon = (day: string) => new Date(`${day}T18:00:00Z`);
 
-test("September 8 clean reset selects September 15 instead of skipping to October", () => {
+test("September 8 clean reset selects September 16 instead of skipping to October", () => {
   const state = createCleanRunTestState("launch", noon("2026-09-08"));
-  assert.equal(state.period.startDate, "2026-09-15");
+  assert.equal(state.period.startDate, "2026-09-16");
   assert.equal(state.period.endDate, "2026-09-30");
   assert.equal(state.period.availabilityOpenAt, "2026-09-08");
   assert.deepEqual(state.shifts, []);
@@ -32,7 +32,7 @@ test("October window opens September 23 on the real clock without losing Septemb
   const october = openDueScheduleCycle(original, noon("2026-09-23"));
   assert.deepEqual(original, copy);
   assert.equal(october.period.startDate, "2026-10-01");
-  assert.equal(october.period.endDate, "2026-10-14");
+  assert.equal(october.period.endDate, "2026-10-15");
   assert.equal(october.period.availabilityOpenAt, "2026-09-23");
   assert.equal(availabilityReminderDate(october.period.releaseDate), "2026-09-27");
   assert.equal(october.period.availabilityDeadlineAt, "2026-09-28");
@@ -68,7 +68,7 @@ test("employees retain September shifts and coverage while submitting fresh Octo
   assert.deepEqual(changed.shifts, october.shifts, "approving September coverage must not modify October's draft");
 });
 
-test("October publication has distinct emails and the following window opens October 7", () => {
+test("October publication has distinct emails and the following window opens October 8", () => {
   const original = september();
   const october = openDueScheduleCycle(original, noon("2026-09-23"));
   october.period.status = "published";
@@ -77,9 +77,9 @@ test("October publication has distinct emails and the following window opens Oct
   const septemberKeys = new Set(plans(original).map((p) => p.dedupKey));
   assert(plans(october).every((p) => !septemberKeys.has(p.dedupKey)));
   assert.equal(publishedScheduleWindows(october).length, 2);
-  assert.equal(openDueScheduleCycle(october, noon("2026-10-06")), october);
-  const next = openDueScheduleCycle(october, noon("2026-10-07"));
-  assert.equal(next.period.startDate, "2026-10-15");
+  assert.equal(openDueScheduleCycle(october, noon("2026-10-07")), october);
+  const next = openDueScheduleCycle(october, noon("2026-10-08"));
+  assert.equal(next.period.startDate, "2026-10-16");
   assert.equal(next.period.endDate, "2026-10-31");
   assert.equal(next.dayProgression.enabled, false);
   assert.equal(publishedScheduleWindows(next).length, 2);

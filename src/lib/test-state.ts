@@ -78,7 +78,7 @@ function cleanRunPeriod(now: Date): SchedulePeriod {
   // Use the nearest upcoming period with at least one remaining day for availability.
   const today = dateInTimeZone(now, "America/Edmonton");
   let period = createNextSchedulePeriod({ ...schedulePeriod, endDate: today });
-  while (period.availabilityDeadlineAt <= today || !["01", "15"].includes(period.startDate.slice(-2))) {
+  while (period.availabilityDeadlineAt <= today || !["01", "16"].includes(period.startDate.slice(-2))) {
     period = createNextSchedulePeriod(period);
   }
   return { ...period, availabilityOpenAt: period.availabilityOpenAt < today ? today : period.availabilityOpenAt };
