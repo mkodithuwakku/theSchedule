@@ -1,4 +1,5 @@
 import { allWorkspaceShifts } from "@/lib/schedule-progression";
+import { pendingCoverageForShift } from "@/lib/coverage-policy";
 import { randomUUID } from "node:crypto";
 import type { AuditEntry, NotificationEntry, SwapRequest } from "@/lib/demo-data";
 import { prisma } from "@/lib/prisma";
@@ -146,7 +147,8 @@ function mergeEmployeeCoverage(existing: StoredTestState, candidate: StoredTestS
     const prior = existing.coverage.find((item) => item.id === request.id);
     if (!prior) {
       const shift = allWorkspaceShifts(existing).find((item) => item.id === request.shiftId);
-      if (request.requestedById === employeeId && request.status === "open" && !request.claimedById && shift?.employeeId === employeeId) {
+      if (request.requestedById === employeeId && request.status === "open" && !request.claimedById && shift?.employeeId === employeeId &&
+        !pendingCoverageForShift(next, request.shiftId)) {
         next.push({ ...request, requestedById: employeeId, status: "open", claimedById: undefined, managerNote: undefined });
       }
       continue;

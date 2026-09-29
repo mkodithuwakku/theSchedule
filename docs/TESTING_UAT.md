@@ -315,3 +315,12 @@ The manager demo is ready only when:
 - all failures have UAT issues with enough evidence to reproduce.
 
 Passing automated checks alone means the code is internally consistent. It does not prove Google, Resend, Vercel Cron, inbox placement, or multi-user production behavior.
+
+## September 28 regression checks
+
+- Keep a September published period with submitted availability, open October, then submit October availability. Check October 9 custom unavailability 09:00–15:00 against a 12:00–18:00 shift before and after the final employee submits. Manual assignment and auto-assignment must exclude that employee; existing conflicting assignments must block publication. Repeat with submission order reversed and check September availability still applies to September shifts.
+- Repeat with a shift-specific 09:00–15:00 entry: 12:00–18:00 remains allowed; the exact 09:00–15:00 shift is blocked.
+- Approve A's coverage request for B, then have B request coverage for the same shift on desktop and mobile. A new request opens; the previous approval remains. C can offer and the manager can approve it. Only one open/offered request is allowed per shift, and A cannot reopen B's shift.
+- While drafting October, correct who worked a September shift from Published schedules. Verify the calendar, selected September hours report, and CSV; original published hours and October draft must stay unchanged. Verify the audit reason and absence of correction emails. Employees cannot make this correction.
+
+Automated regression tests cover period-specific selection, the publication API, repeated coverage and duplicate prevention, historical/current corrections, original hours, permission boundaries, and unchanged unrelated workspace data.

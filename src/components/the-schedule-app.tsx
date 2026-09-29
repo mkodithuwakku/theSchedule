@@ -26,6 +26,8 @@ import {
 import { signOut } from "next-auth/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { allWorkspaceShifts, assignWorkspaceShifts, publishedScheduleWindows, createNextSchedulePeriod } from "@/lib/schedule-progression";
+import { pendingCoverageForShift } from "@/lib/coverage-policy";
+import { correctWorkedShift } from "@/lib/worked-shift-correction";
 import type { AppAccess } from "@/lib/access-shared";
 import { actionNotificationEmail, ownerAlertEmail } from "@/lib/email-templates";
 import { availabilityReminderDate, dateInTimeZone } from "@/lib/schedule-rollout";
@@ -612,6 +614,9 @@ export function TheScheduleApp({
     cycleNumber: 1
   });
   const [selectedPublishedPeriodId, setSelectedPublishedPeriodId] = useState("");
+  const [selectedReportPeriodId, setSelectedReportPeriodId] = useState("");
+  const [workedCorrection, setWorkedCorrection] = useState({ shiftId: "", employeeId: "", reason: "" });
+  const [workedCorrectionMessage, setWorkedCorrectionMessage] = useState("");
   const [scheduleHistory, setScheduleHistory] = useState<ArchivedSchedule[]>([]);
   const [dayProgressionAction, setDayProgressionAction] = useState<DayProgressionAction | null>(null);
   const [dayProgressionMessage, setDayProgressionMessage] = useState("");
@@ -703,7 +708,6 @@ export function TheScheduleApp({
   );
   const calendarWeeks = useMemo(() => buildCalendarWeeks(period, shiftsByDate), [period, shiftsByDate]);
   const finalHours = useMemo(() => calculateHours(people, shifts, false), [people, shifts]);
-  const initialHours = useMemo(() => calculateHours(people, shifts, true), [people, shifts]);
   const periodAvailability = availability.filter((submission) => submission.schedulePeriodId === period.id);
   const activeSubmission = periodAvailability.find((submission) => submission.userId === activeEmployee.id);
   const activeAvailabilityDraft = sortUnavailableEntries(availabilityDrafts[activeEmployee.id] ?? []);
@@ -736,6 +740,10 @@ export function TheScheduleApp({
   const publishedWindows = publishedScheduleWindows({ period, shifts, scheduleHistory });
   const publishedShifts = publishedWindows.filter((window) => window.period.endDate >= todayIso).flatMap((window) => window.shifts);
   const allShifts = allWorkspaceShifts({ shifts, scheduleHistory });
+  const reportWindows = [{ period, shifts }, ...scheduleHistory.filter((entry) => entry.period.id !== period.id)];
+  const reportWindow = reportWindows.find((window) => window.period.id === selectedReportPeriodId) ?? reportWindows[0];
+  const reportFinalHours = calculateHours(people, reportWindow.shifts);
+  const reportInitialHours = calculateHours(people, reportWindow.shifts, true);
   const viewedPublishedWindow = publishedWindows.find((window) => window.period.id === selectedPublishedPeriodId)
     ?? publishedWindows.find((window) => window.period.endDate >= todayIso)
     ?? publishedWindows.at(-1);
@@ -1992,6 +2000,7 @@ export function TheScheduleApp({
   function coverageBlockReason(request: CoverageRequest, employeeId: string) {
     const shift = allShifts.find((item) => item.id === request.shiftId);
     if (!shift) return "Shift not found.";
+    if (shift.employeeId !== request.requestedById) return "This request no longer belongs to the assigned employee.";
     if (shift.employeeId === employeeId || request.requestedById === employeeId) return "This is already your shift.";
     if (employeeHasShiftOnDate(employeeId, shift.date)) return "You already work that day.";
     if (isEmployeeUnavailable(employeeId, shift, availability)) return "You are unavailable for that shift.";
@@ -2043,14 +2052,33 @@ export function TheScheduleApp({
     return swapBlockReason(requesterShift, targetShift);
   }
 
+  function saveWorkedCorrection() {
+    if (!isManager || mode !== "manager") return;
+    try {
+      const corrected = correctWorkedShift({ period, shifts, scheduleHistory, people, coverage, swaps, auditLog }, {
+        ...workedCorrection, actorId: currentIdentity.id, today: todayIso,
+        now: new Date().toISOString(), auditId: `audit_worked_${crypto.randomUUID()}`
+      });
+      setShifts(corrected.shifts);
+      setScheduleHistory(corrected.scheduleHistory);
+      setCoverage(corrected.coverage);
+      setSwaps(corrected.swaps);
+      setAuditLog(corrected.auditLog);
+      setWorkedCorrection({ shiftId: "", employeeId: "", reason: "" });
+      setWorkedCorrectionMessage("Correction recorded. Check the saving status above for confirmation.");
+    } catch (error) {
+      setWorkedCorrectionMessage(error instanceof Error ? error.message : "Unable to correct this shift.");
+    }
+  }
+
   function requestCoverage(shiftId: string) {
     if (!activeInviteAccepted) {
       window.alert("Accept the invite before requesting coverage.");
       return;
     }
-    if (coverage.some((request) => request.shiftId === shiftId && request.status !== "cancelled")) return;
+    if (pendingCoverageForShift(coverage, shiftId)) return;
     const shift = allShifts.find((item) => item.id === shiftId);
-    if (!shift) return;
+    if (!shift || shift.employeeId !== activeEmployee.id) return;
 
     const request: CoverageRequest = {
       id: `coverage_${Date.now()}`,
@@ -2097,7 +2125,7 @@ export function TheScheduleApp({
       return;
     }
     const request = coverage.find((item) => item.id === requestId);
-    if (!request) return;
+    if (!request || request.status !== "open") return;
     const blocked = coverageBlockReason(request, activeEmployee.id);
     if (blocked) {
       window.alert(blocked);
@@ -2131,7 +2159,7 @@ export function TheScheduleApp({
 
   function approveCoverage(requestId: string, approved: boolean) {
     const request = coverage.find((item) => item.id === requestId);
-    if (!request) return;
+    if (!request || request.status !== "offered") return;
     if (approved && request.claimedById) {
       const blocked = coverageBlockReason(request, request.claimedById);
       if (blocked) {
@@ -2291,11 +2319,11 @@ export function TheScheduleApp({
   }
 
   function exportCsv() {
-    const csv = buildHoursCsv(people, shifts);
+    const csv = buildHoursCsv(people, reportWindow.shifts);
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a");
     link.href = url;
-    link.download = "the-schedule-hours.csv";
+    link.download = `the-schedule-hours-${reportWindow.period.startDate}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   }
@@ -2733,10 +2761,41 @@ export function TheScheduleApp({
   const publishedCalendar = viewedPublishedWindow ? (
     <Section title="Published schedules" icon={<CalendarDays size={18} />}>
       <Field label="Schedule period">
-        <select className={inputBase} value={viewedPublishedWindow.period.id} onChange={(event) => setSelectedPublishedPeriodId(event.target.value)}>
+        <select className={inputBase} value={viewedPublishedWindow.period.id} onChange={(event) => { setSelectedPublishedPeriodId(event.target.value); setWorkedCorrection({ shiftId: "", employeeId: "", reason: "" }); setWorkedCorrectionMessage(""); }}>
           {publishedWindows.map((window) => <option key={window.period.id} value={window.period.id}>{window.period.name}</option>)}
         </select>
       </Field>
+      {isManager && mode === "manager" && (
+        <div className="my-4 rounded-lg border border-line bg-paper p-4">
+          <h3 className="font-black">Correct who worked a past shift</h3>
+          <p className="mt-1 text-sm text-ink/65">Select a shift from a previous day and record who actually worked it. Original published assignments stay in the hours report. This correction does not send shift notifications.</p>
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
+            <Field label="Completed shift">
+              <select className={inputBase} value={workedCorrection.shiftId} onChange={(event) => {
+                const shift = viewedPublishedWindow.shifts.find((item) => item.id === event.target.value);
+                setWorkedCorrection({ shiftId: event.target.value, employeeId: shift?.employeeId ?? "", reason: "" });
+                setWorkedCorrectionMessage("");
+              }}>
+                <option value="">Select a completed shift</option>
+                {viewedPublishedWindow.shifts.filter((shift) => shift.date < todayIso).map((shift) => (
+                  <option key={shift.id} value={shift.id}>{getDayName(shift.date)} {formatTime(shift.startTime)}–{formatTime(shift.endTime)} · {shift.employeeId ? nameFor(shift.employeeId) : shift.externalAssigneeName ?? "Unassigned"}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Employee who worked">
+              <select className={inputBase} value={workedCorrection.employeeId} onChange={(event) => setWorkedCorrection({ ...workedCorrection, employeeId: event.target.value })}>
+                <option value="">Select an employee</option>
+                {people.map((person) => <option key={person.id} value={person.id}>{person.name}{person.active ? "" : " (inactive)"}</option>)}
+              </select>
+            </Field>
+            <Field label="Reason for correction">
+              <input className={inputBase} value={workedCorrection.reason} onChange={(event) => setWorkedCorrection({ ...workedCorrection, reason: event.target.value })} placeholder="For example: covered after the assigned employee became sick" />
+            </Field>
+            <div className="self-end"><Button onClick={saveWorkedCorrection} disabled={!workedCorrection.shiftId || !workedCorrection.employeeId || !workedCorrection.reason.trim()}>Save worked shift correction</Button></div>
+          </div>
+          {workedCorrectionMessage && <p role="status" className="mt-3 text-sm font-semibold">{workedCorrectionMessage}</p>}
+        </div>
+      )}
       <MobileTeamSchedule people={people} calendarWeeks={publishedWeeks} activeEmployeeId={activeEmployee.id} period={viewedPublishedWindow.period} />
       <ScheduleGrid title={viewedPublishedWindow.period.name} people={people} calendarWeeks={publishedWeeks} availability={availability} showAssignments className="hidden md:block" />
     </Section>
@@ -4387,7 +4446,12 @@ export function TheScheduleApp({
               </div>
             }
           >
-            <div className="overflow-x-auto">
+            <Field label="Report schedule period">
+              <select className={inputBase} value={reportWindow.period.id} onChange={(event) => setSelectedReportPeriodId(event.target.value)}>
+                {reportWindows.map((window) => <option key={window.period.id} value={window.period.id}>{window.period.name}</option>)}
+              </select>
+            </Field>
+            <div className="mt-4 overflow-x-auto">
               <table className="w-full min-w-[760px] border-separate border-spacing-0 text-left text-sm">
                 <thead>
                   <tr className="text-xs uppercase tracking-normal text-ink/55">
@@ -4399,8 +4463,8 @@ export function TheScheduleApp({
                   </tr>
                 </thead>
                 <tbody>
-                  {finalHours.map((final) => {
-                    const initial = initialHours.find((item) => item.employeeId === final.employeeId);
+                  {reportFinalHours.map((final) => {
+                    const initial = reportInitialHours.find((item) => item.employeeId === final.employeeId);
                     const delta = final.hours - (initial?.hours ?? 0);
                     return (
                       <tr key={final.employeeId}>
@@ -4929,7 +4993,7 @@ function MobileShiftCards({
   return (
     <div className="grid gap-3">
       {shifts.map((shift) => {
-        const coverageRequest = coverageRequests.find((request) => request.shiftId === shift.id && request.status !== "cancelled");
+        const coverageRequest = pendingCoverageForShift(coverageRequests, shift.id);
         const requestPending = coverageRequest?.status === "open" || coverageRequest?.status === "offered";
         const requestLabel =
           coverageRequest?.status === "open"
@@ -5389,7 +5453,7 @@ function ShiftList({
   return (
     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
       {shifts.map((shift) => {
-        const coverageRequest = coverageRequests.find((request) => request.shiftId === shift.id && request.status !== "cancelled");
+        const coverageRequest = pendingCoverageForShift(coverageRequests, shift.id);
         const requestPending = coverageRequest?.status === "open" || coverageRequest?.status === "offered";
         const requestLabel =
           coverageRequest?.status === "open"

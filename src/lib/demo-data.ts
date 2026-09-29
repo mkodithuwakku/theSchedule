@@ -379,10 +379,14 @@ export function rangesOverlap(startA: string, endA: string, startB: string, endB
 
 export function isEmployeeUnavailable(
   employeeId: string,
-  shift: Pick<Shift, "date" | "startTime" | "endTime">,
+  shift: Pick<Shift, "schedulePeriodId" | "date" | "startTime" | "endTime">,
   submissions: AvailabilitySubmission[]
 ) {
-  const submission = submissions.find((item) => item.userId === employeeId);
+  // Multiple periods coexist while the next draft is being prepared. Never let
+  // a retained submission from an older period shadow this shift's availability.
+  const submission = submissions.find((item) =>
+    item.userId === employeeId && item.schedulePeriodId === shift.schedulePeriodId
+  );
   if (!submission) return false;
 
   return submission.unavailable.some((entry) => {
@@ -402,7 +406,7 @@ export function isEmployeeUnavailable(
 }
 
 export function availableEmployeesForShift(
-  shift: Pick<Shift, "date" | "startTime" | "endTime">,
+  shift: Pick<Shift, "schedulePeriodId" | "date" | "startTime" | "endTime">,
   people: Employee[],
   submissions: AvailabilitySubmission[]
 ) {

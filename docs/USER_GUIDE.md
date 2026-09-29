@@ -349,3 +349,13 @@ Restore verifies checksum and size before changing the workspace. It also create
 2. Select `Sign out`.
 3. If the device is shared, also sign out of the Google browser profile or close the private window.
 4. Use Back and refresh once to confirm protected schedule data is not displayed.
+
+## Repeated coverage and past shift corrections
+
+After coverage is approved, the new assigned employee can request coverage again from My Shifts on desktop or mobile. Only an open request or an offer awaiting manager review blocks another request. Earlier approved, rejected, and cancelled requests remain in history.
+
+Managers can correct who actually worked a past shift from Dashboard → Published schedules. Select the published period, choose a completed shift from a previous day, choose the employee who worked it, enter a reason, and select **Save worked shift correction**. Wait for **Saved**. The calendar and final worked hours update, while the original published assignment remains intact. The correction is audited and does not send shift-change emails. Pending coverage or swap requests involving that completed shift are closed; completed request history stays intact. Availability and same-day planning restrictions do not prevent recording work that already occurred.
+
+In Reports, select the schedule period to view or export its original published hours and final worked hours, including corrections to older published schedules.
+
+Availability always applies to the shift's own schedule period, even while a new draft and an older published schedule coexist. Shift-specific selections block only the exact submitted shift; custom ranges block overlapping shifts and full-day entries block the whole day. Existing draft conflicts are flagged for the manager to resolve; assignments are not automatically rewritten.

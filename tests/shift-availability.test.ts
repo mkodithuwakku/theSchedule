@@ -44,15 +44,34 @@ test("custom time ranges still block overlapping shifts; full days block every s
     assert.equal(isEmployeeUnavailable(person.id, shift, custom), true);
     assert.equal(isEmployeeUnavailable(person.id, shift, fullDay), true);
   }
-  assert.equal(isEmployeeUnavailable(person.id, { date: dates.weekday, startTime: "09:45", endTime: "15:15" }, custom), false);
+  assert.equal(isEmployeeUnavailable(person.id, { schedulePeriodId: schedulePeriod.id, date: dates.weekday, startTime: "09:45", endTime: "15:15" }, custom), false);
   assert.equal(isEmployeeUnavailable(person.id, { ...shifts[0], date: "2026-09-17" }, fullDay), false);
   assert.equal(isEmployeeUnavailable("another-employee", shifts[0], fullDay), false);
 });
 
 test("template selections use submitted times and support older entries containing only a template ID", () => {
-  const closing = { date: dates.weekday, startTime: "15:15", endTime: "21:15" };
+  const closing = { schedulePeriodId: schedulePeriod.id, date: dates.weekday, startTime: "15:15", endTime: "21:15" };
   assert.equal(isEmployeeUnavailable(person.id, closing, submission({ shiftTemplateId: "tpl_weekday_close" })), true);
   const saved = submission({ shiftTemplateId: "tpl_weekday_close", startTime: "15:00", endTime: "21:00" });
   assert.equal(isEmployeeUnavailable(person.id, closing, saved), false);
   assert.equal(isEmployeeUnavailable(person.id, { ...closing, startTime: "15:00", endTime: "21:00" }, saved), true);
+});
+
+test("retained prior-period submissions cannot shadow October availability before or after everyone submits", () => {
+  const shift = { id: "oct9", schedulePeriodId: "october", date: "2026-10-09", startTime: "12:00", endTime: "18:00" };
+  const old = { ...submission({})[0], schedulePeriodId: "september", unavailable: [] };
+  const current = { ...submission({ date: shift.date, unavailableType: "custom_time_range", startTime: "09:00", endTime: "15:00" })[0], schedulePeriodId: "october" };
+  for (const availability of [[old, current], [current, old], [old, current, { ...current, userId: "last-employee" }]]) {
+    const copy = structuredClone(availability);
+    assert(isEmployeeUnavailable(person.id, shift, availability));
+    assert.deepEqual(availableEmployeesForShift(shift, [person], availability), []);
+    assert.equal(autoAssignDraftShifts([shift], [person], availability)[0].employeeId, undefined);
+    assert(getScheduleBlockingIssues([{ ...shift, employeeId: person.id }], availability, [person]).some((issue) => issue.code === "availability_conflict"));
+    assert.deepEqual(availability, copy);
+  }
+  assert.equal(isEmployeeUnavailable(person.id, { ...shift, schedulePeriodId: "september" }, [current, old]), false);
+  assert.equal(isEmployeeUnavailable(person.id, shift, [old]), false, "missing October submission must not use September data");
+  const template = { ...current, unavailable: current.unavailable.map((entry) => ({ ...entry, unavailableType: "shift_template" as const })) };
+  assert.equal(isEmployeeUnavailable(person.id, shift, [old, template]), false, "shift-specific overlap remains permitted");
+  assert(isEmployeeUnavailable(person.id, { ...shift, startTime: "09:00", endTime: "15:00" }, [old, template]));
 });
