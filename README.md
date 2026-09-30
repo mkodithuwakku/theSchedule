@@ -176,7 +176,7 @@ However, a database write and an external email cannot form one transaction. A f
 
 ### 5. Recording actual work without rewriting the original plan
 
-Coverage and later corrections can change who worked after publication. Original employee/time fields remain on the shift for comparison. [`correctWorkedShift`](./src/lib/worked-shift-correction.ts) accepts a manager, past published shift, replacement employee, and reason; it records an audit entry and closes pending requests involving that shift while preserving completed history.
+Coverage and later corrections can change who worked after publication. Original employee/time fields remain on the shift for comparison. [`correctWorkedShift`](./src/lib/worked-shift-correction.ts) accepts a manager, past published shift, optional replacement employee, actual start/end times, and reason; it records an audit entry and closes pending requests involving that shift while preserving completed history.
 
 Actual-work corrections intentionally bypass future-planning availability rules and send no email. **Takeaway:** historical facts and planning constraints have different purposes. These reports reflect recorded assignments/corrections, not clock-in data or a payroll system.
 
@@ -248,7 +248,7 @@ Run `npm start` after the build, with the development server stopped if both use
 
 ### Testing scope
 
-At this README revision, **75 automated tests pass**. The suite covers availability rules, schedule generation and publication rejection, employee read/write filtering, concurrent saves, period rollover, repeat coverage, worked-shift corrections, backup fingerprints, reset behavior, notification planning, and authentication configuration/callback handling.
+At this README revision, **80 automated tests pass**. The suite covers availability rules, schedule generation and publication rejection, employee read/write filtering, concurrent saves, period rollover, repeat coverage, worked-shift corrections, backup fingerprints, reset behavior, notification planning, and authentication configuration/callback handling.
 
 Tests use Node's test runner through `tsx`; database/provider boundaries are mocked where exercised. The concurrency test uses an in-memory adapter that models the conditional update. These are regression tests, not proof of real PostgreSQL isolation behavior or complete browser authentication flows. The in-app guided journey and advanced UAT checklist cover manual manager/employee verification; checklist size is not an automated coverage metric.
 

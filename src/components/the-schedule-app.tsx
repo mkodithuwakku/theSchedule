@@ -27,6 +27,7 @@ import { signOut } from "next-auth/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { allWorkspaceShifts, assignWorkspaceShifts, publishedScheduleWindows, createNextSchedulePeriod } from "@/lib/schedule-progression";
 import { pendingCoverageForShift } from "@/lib/coverage-policy";
+import { mallHoursForDate, updatePublishedMallHours, validTimeRange } from "@/lib/schedule-hours";
 import { correctWorkedShift } from "@/lib/worked-shift-correction";
 import type { AppAccess } from "@/lib/access-shared";
 import { actionNotificationEmail, ownerAlertEmail } from "@/lib/email-templates";
@@ -223,6 +224,8 @@ function buildCalendarWeeks(
     Array<{
       date: string;
       inPeriod: boolean;
+      mallHours: { openTime: string; closeTime: string };
+      customMallHours: boolean;
       shifts: Shift[];
     }>
   > = [];
@@ -233,6 +236,8 @@ function buildCalendarWeeks(
       const date = dateToIso(cursor);
       week.push({
         date,
+        mallHours: mallHoursForDate(period, date),
+        customMallHours: !!period.mallHoursOverrides?.[date],
         inPeriod: cursor >= periodStart && cursor <= periodEnd,
         shifts: shiftsByDateMap.get(date) ?? []
       });
@@ -389,8 +394,14 @@ function renderScheduleCanvas(title: string, calendarWeeks: ReturnType<typeof bu
       context.font = "800 16px Arial, sans-serif";
       context.fillText(shortDayLabel(day.date), x + 12, y + 24);
 
+      if (day.inPeriod) {
+        context.fillStyle = "#667085";
+        context.font = "600 11px Arial, sans-serif";
+        drawText(context, `${formatTime(day.mallHours.openTime)}-${formatTime(day.mallHours.closeTime)}`, x + 12, y + 40, cellWidth - 24);
+      }
+
       day.shifts.slice(0, 4).forEach((shift, shiftIndex) => {
-        const chipY = y + 42 + shiftIndex * 33;
+        const chipY = y + 48 + shiftIndex * 31;
         context.fillStyle = shift.employeeId || shift.externalAssigneeName ? "#e9f8f5" : "#f6f8fc";
         drawRoundedRect(context, x + 10, chipY, cellWidth - 20, 27, 6);
         context.fill();
@@ -615,7 +626,7 @@ export function TheScheduleApp({
   });
   const [selectedPublishedPeriodId, setSelectedPublishedPeriodId] = useState("");
   const [selectedReportPeriodId, setSelectedReportPeriodId] = useState("");
-  const [workedCorrection, setWorkedCorrection] = useState({ shiftId: "", employeeId: "", reason: "" });
+  const [workedCorrection, setWorkedCorrection] = useState({ shiftId: "", employeeId: "", startTime: "", endTime: "", reason: "" });
   const [workedCorrectionMessage, setWorkedCorrectionMessage] = useState("");
   const [scheduleHistory, setScheduleHistory] = useState<ArchivedSchedule[]>([]);
   const [dayProgressionAction, setDayProgressionAction] = useState<DayProgressionAction | null>(null);
@@ -2052,6 +2063,17 @@ export function TheScheduleApp({
     return swapBlockReason(requesterShift, targetShift);
   }
 
+  function savePublishedMallHours(date: string, hours: { openTime: string; closeTime: string } | null, periodId = viewedPublishedWindow?.period.id) {
+    if (!isManager || mode !== "manager" || !periodId) return;
+    const updated = updatePublishedMallHours({ period, shifts, scheduleHistory, people, auditLog }, {
+      periodId, date, hours, actorId: currentIdentity.id,
+      now: new Date().toISOString(), auditId: `audit_mall_hours_${crypto.randomUUID()}`
+    });
+    setPeriod(updated.period);
+    setScheduleHistory(updated.scheduleHistory);
+    setAuditLog(updated.auditLog);
+  }
+
   function saveWorkedCorrection() {
     if (!isManager || mode !== "manager") return;
     try {
@@ -2064,7 +2086,7 @@ export function TheScheduleApp({
       setCoverage(corrected.coverage);
       setSwaps(corrected.swaps);
       setAuditLog(corrected.auditLog);
-      setWorkedCorrection({ shiftId: "", employeeId: "", reason: "" });
+      setWorkedCorrection({ shiftId: "", employeeId: "", startTime: "", endTime: "", reason: "" });
       setWorkedCorrectionMessage("Correction recorded. Check the saving status above for confirmation.");
     } catch (error) {
       setWorkedCorrectionMessage(error instanceof Error ? error.message : "Unable to correct this shift.");
@@ -2761,19 +2783,19 @@ export function TheScheduleApp({
   const publishedCalendar = viewedPublishedWindow ? (
     <Section title="Published schedules" icon={<CalendarDays size={18} />}>
       <Field label="Schedule period">
-        <select className={inputBase} value={viewedPublishedWindow.period.id} onChange={(event) => { setSelectedPublishedPeriodId(event.target.value); setWorkedCorrection({ shiftId: "", employeeId: "", reason: "" }); setWorkedCorrectionMessage(""); }}>
+        <select className={inputBase} value={viewedPublishedWindow.period.id} onChange={(event) => { setSelectedPublishedPeriodId(event.target.value); setWorkedCorrection({ shiftId: "", employeeId: "", startTime: "", endTime: "", reason: "" }); setWorkedCorrectionMessage(""); }}>
           {publishedWindows.map((window) => <option key={window.period.id} value={window.period.id}>{window.period.name}</option>)}
         </select>
       </Field>
       {isManager && mode === "manager" && (
         <div className="my-4 rounded-lg border border-line bg-paper p-4">
-          <h3 className="font-black">Correct who worked a past shift</h3>
-          <p className="mt-1 text-sm text-ink/65">Select a shift from a previous day and record who actually worked it. Original published assignments stay in the hours report. This correction does not send shift notifications.</p>
+          <h3 className="font-black">Correct a completed shift</h3>
+          <p className="mt-1 text-sm text-ink/65">Select a shift from a previous day and record who worked it and their actual start and end times. Original published assignments and times stay in the hours report. This correction does not send shift notifications.</p>
           <div className="mt-3 grid gap-3 md:grid-cols-2">
             <Field label="Completed shift">
               <select className={inputBase} value={workedCorrection.shiftId} onChange={(event) => {
                 const shift = viewedPublishedWindow.shifts.find((item) => item.id === event.target.value);
-                setWorkedCorrection({ shiftId: event.target.value, employeeId: shift?.employeeId ?? "", reason: "" });
+                setWorkedCorrection({ shiftId: event.target.value, employeeId: shift?.employeeId ?? "", startTime: shift?.startTime ?? "", endTime: shift?.endTime ?? "", reason: "" });
                 setWorkedCorrectionMessage("");
               }}>
                 <option value="">Select a completed shift</option>
@@ -2784,20 +2806,26 @@ export function TheScheduleApp({
             </Field>
             <Field label="Employee who worked">
               <select className={inputBase} value={workedCorrection.employeeId} onChange={(event) => setWorkedCorrection({ ...workedCorrection, employeeId: event.target.value })}>
-                <option value="">Select an employee</option>
+                <option value="">Keep current assignment</option>
                 {people.map((person) => <option key={person.id} value={person.id}>{person.name}{person.active ? "" : " (inactive)"}</option>)}
               </select>
+            </Field>
+            <Field label="Actual start time">
+              <input type="time" className={inputBase} value={workedCorrection.startTime} onChange={(event) => setWorkedCorrection({ ...workedCorrection, startTime: event.target.value })} />
+            </Field>
+            <Field label="Actual end time">
+              <input type="time" className={inputBase} value={workedCorrection.endTime} onChange={(event) => setWorkedCorrection({ ...workedCorrection, endTime: event.target.value })} />
             </Field>
             <Field label="Reason for correction">
               <input className={inputBase} value={workedCorrection.reason} onChange={(event) => setWorkedCorrection({ ...workedCorrection, reason: event.target.value })} placeholder="For example: covered after the assigned employee became sick" />
             </Field>
-            <div className="self-end"><Button onClick={saveWorkedCorrection} disabled={!workedCorrection.shiftId || !workedCorrection.employeeId || !workedCorrection.reason.trim()}>Save worked shift correction</Button></div>
+            <div className="self-end"><Button onClick={saveWorkedCorrection} disabled={!workedCorrection.shiftId || !validTimeRange(workedCorrection.startTime, workedCorrection.endTime) || !workedCorrection.reason.trim()}>Save worked shift correction</Button></div>
           </div>
           {workedCorrectionMessage && <p role="status" className="mt-3 text-sm font-semibold">{workedCorrectionMessage}</p>}
         </div>
       )}
-      <MobileTeamSchedule people={people} calendarWeeks={publishedWeeks} activeEmployeeId={activeEmployee.id} period={viewedPublishedWindow.period} />
-      <ScheduleGrid title={viewedPublishedWindow.period.name} people={people} calendarWeeks={publishedWeeks} availability={availability} showAssignments className="hidden md:block" />
+      <MobileTeamSchedule people={people} calendarWeeks={publishedWeeks} activeEmployeeId={activeEmployee.id} period={viewedPublishedWindow.period} onSaveMallHours={isManager && mode === "manager" ? savePublishedMallHours : undefined} />
+      <ScheduleGrid title={viewedPublishedWindow.period.name} people={people} calendarWeeks={publishedWeeks} onSaveMallHours={isManager && mode === "manager" ? savePublishedMallHours : undefined} availability={availability} showAssignments className="hidden md:block" />
     </Section>
   ) : <div className="rounded-lg border border-line bg-white p-4">Your manager has not published a schedule yet.</div>;
 
@@ -3151,6 +3179,7 @@ export function TheScheduleApp({
               title={period.name}
               people={people}
               calendarWeeks={calendarWeeks}
+                onSaveMallHours={period.status === "published" ? (date, hours) => savePublishedMallHours(date, hours, period.id) : undefined}
               availability={availability}
               showAssignments
             />
@@ -3539,6 +3568,7 @@ export function TheScheduleApp({
                 people={people}
                 title="Schedule Builder"
                 calendarWeeks={calendarWeeks}
+                onSaveMallHours={period.status === "published" ? (date, hours) => savePublishedMallHours(date, hours, period.id) : undefined}
                 availability={availability}
                 hours={finalHours}
                 assignablePeople={schedulableEmployees}
@@ -5043,13 +5073,57 @@ function MobileShiftCards({
   );
 }
 
+type MallHoursEditorProps = {
+  date: string;
+  hours: { openTime: string; closeTime: string };
+  custom: boolean;
+  onSave?: (date: string, hours: { openTime: string; closeTime: string } | null) => void;
+};
+
+function MallHoursEditor({ date, hours, custom, onSave }: MallHoursEditorProps) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(hours);
+  const [error, setError] = useState("");
+  const label = `${formatTime(hours.openTime)}-${formatTime(hours.closeTime)}`;
+  function save(value: MallHoursEditorProps["hours"] | null) {
+    try {
+      onSave?.(date, value);
+      setEditing(false);
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to save mall hours.");
+    }
+  }
+  if (!onSave) return <div className="mt-1 text-xs font-semibold text-ink/55">{label}</div>;
+  return (
+    <div className="mt-1 text-xs font-semibold text-ink/55">
+      <button type="button" className="text-left hover:text-mall hover:underline" aria-label={`Edit mall hours for ${date}`} aria-expanded={editing} onClick={() => { setDraft(hours); setError(""); setEditing(!editing); }}>
+        {label} <span aria-hidden="true">✎</span>
+      </button>
+      {editing && <div className="mt-2 grid gap-2 rounded-lg border border-line bg-paper p-2 text-ink">
+        <div className="font-bold">Mall hours · {shortDayLabel(date)}</div>
+        <label>Opens<input aria-label={`Mall opening time for ${date}`} type="time" className={cx(inputBase, "mt-1 min-w-0")} value={draft.openTime} onChange={(event) => setDraft({ ...draft, openTime: event.target.value })} /></label>
+        <label>Closes<input aria-label={`Mall closing time for ${date}`} type="time" className={cx(inputBase, "mt-1 min-w-0")} value={draft.closeTime} onChange={(event) => setDraft({ ...draft, closeTime: event.target.value })} /></label>
+        <p>Applies only to this date. Shift times are edited separately.</p>
+        {!validTimeRange(draft.openTime, draft.closeTime) && <p role="alert">Closing time must be after opening time.</p>}
+        {error && <p role="alert">{error}</p>}
+        <Button disabled={!validTimeRange(draft.openTime, draft.closeTime)} onClick={() => save(draft)}>Save mall hours</Button>
+        {custom && <Button variant="secondary" onClick={() => save(null)}>Use regular hours</Button>}
+        <Button variant="secondary" onClick={() => setEditing(false)}>Cancel</Button>
+      </div>}
+    </div>
+  );
+}
+
 function MobileTeamSchedule({
   people,
   calendarWeeks,
   activeEmployeeId,
-  period
+  period,
+  onSaveMallHours
 }: {
   people: Employee[];
+  onSaveMallHours?: MallHoursEditorProps["onSave"];
   calendarWeeks: ReturnType<typeof buildCalendarWeeks>;
   activeEmployeeId: string;
   period: SchedulePeriod;
@@ -5061,15 +5135,12 @@ function MobileTeamSchedule({
       <MobilePageHeading eyebrow={period.status === "published" ? "Published schedule" : "Team preview"} title="Team schedule" detail={period.name} />
       <div className="grid gap-3">
         {days.map((day) => {
-          const dayHours = storeHours.find((entry) => entry.dayOfWeek === parseLocalDate(day.date).getDay());
           return (
             <section key={day.date} className="overflow-hidden rounded-2xl border border-line bg-white shadow-sm">
               <div className="flex items-center justify-between gap-3 border-b border-line bg-paper px-4 py-3">
                 <div>
                   <div className="font-black">{getDayName(day.date)}</div>
-                  <div className="mt-0.5 text-xs font-semibold text-ink/50">
-                    {dayHours ? `${formatTime(dayHours.openTime)}-${formatTime(dayHours.closeTime)}` : "Store hours unavailable"}
-                  </div>
+                  <MallHoursEditor key={`${day.date}-${day.mallHours.openTime}-${day.mallHours.closeTime}-${day.customMallHours}`} date={day.date} hours={day.mallHours} custom={day.customMallHours} onSave={onSaveMallHours} />
                 </div>
                 <Badge>{day.shifts.length} shift{day.shifts.length === 1 ? "" : "s"}</Badge>
               </div>
@@ -5114,6 +5185,7 @@ function ScheduleGrid({
   onRemove,
   onUpdateShift,
   onAddShiftForDate,
+  onSaveMallHours,
   selectedShift,
   selectedShiftId,
   blockingShiftIds = new Set<string>(),
@@ -5132,6 +5204,7 @@ function ScheduleGrid({
   onRemove?: (shiftId: string) => void;
   onUpdateShift?: (shiftId: string, updates: Partial<Pick<Shift, "date" | "startTime" | "endTime" | "employeeId" | "externalAssigneeName">>) => void;
   onAddShiftForDate?: (date: string) => void;
+  onSaveMallHours?: MallHoursEditorProps["onSave"];
   selectedShift?: Shift | null;
   selectedShiftId?: string | null;
   blockingShiftIds?: Set<string>;
@@ -5289,8 +5362,7 @@ function ScheduleGrid({
           <div className="grid">
             {calendarWeeks.map((week, weekIndex) => (
               <div key={`week-${weekIndex}`} className="grid grid-cols-7 border-b border-line last:border-b-0">
-                {week.map(({ date, inPeriod, shifts }) => {
-                  const dayHours = storeHours.find((entry) => entry.dayOfWeek === parseLocalDate(date).getDay());
+                {week.map(({ date, inPeriod, shifts, mallHours, customMallHours }) => {
                   const visibleShifts = showOnlyUnassigned
                     ? shifts.filter((shift) => !isShiftFilled(shift))
                     : shifts;
@@ -5308,9 +5380,7 @@ function ScheduleGrid({
                           <div className={cx("text-sm font-black leading-tight", !inPeriod && "text-ink/35")}>
                             {shortDayLabel(date)}
                           </div>
-                          <div className={cx("mt-1 text-xs font-semibold", inPeriod ? "text-ink/55" : "text-ink/30")}>
-                            {dayHours && inPeriod ? `${formatTime(dayHours.openTime)}-${formatTime(dayHours.closeTime)}` : weekdayLong(date)}
-                          </div>
+                          {inPeriod ? <MallHoursEditor key={`${date}-${mallHours.openTime}-${mallHours.closeTime}-${customMallHours}`} date={date} hours={mallHours} custom={customMallHours} onSave={onSaveMallHours} /> : <div className="mt-1 text-xs text-ink/30">{weekdayLong(date)}</div>}
                         </div>
                         {inPeriod && shifts.length > 0 && <Badge>{showOnlyUnassigned ? `${visibleShifts.length}/${shifts.length}` : shifts.length}</Badge>}
                       </div>

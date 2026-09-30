@@ -61,3 +61,39 @@ test("worked corrections reject nonmanagers, future/today shifts, drafts and inc
   assert.throws(() => correctWorkedShift(state, { ...input, employeeId: "unknown" }), /Select the employee/);
   assert.throws(() => correctWorkedShift(state, { ...input, reason: " " }), /reason/);
 });
+
+test("actual times update current and historical reports while preserving published hours across repeated corrections", () => {
+  for (const archived of [false, true]) {
+    const { state, input, shift, manager, employee } = fixture(archived);
+    const changed = correctWorkedShift(state, { ...input, employeeId: manager.id, startTime: "10:00", endTime: "14:00" });
+    const worked = allWorkspaceShifts(changed).find((item) => item.id === shift.id)!;
+    assert.equal(worked.startTime, "10:00");
+    assert.equal(worked.endTime, "14:00");
+    assert.equal(calculateHours(state.people, [worked]).find((row) => row.employeeId === manager.id)?.hours, 4);
+    assert.deepEqual(calculateHours(state.people, [worked], true), calculateHours(state.people, [shift], true));
+    assert.match(changed.auditLog[0].summary, /10:00-14:00/);
+    const again = correctWorkedShift(changed, { ...input, startTime: "11:00", endTime: "14:00" });
+    const final = allWorkspaceShifts(again).find((item) => item.id === shift.id)!;
+    assert.equal(final.employeeId, employee.id);
+    assert.equal(calculateHours(state.people, [final]).find((row) => row.employeeId === employee.id)?.hours, 3);
+    assert.deepEqual(calculateHours(state.people, [final], true), calculateHours(state.people, [shift], true));
+    assert.equal(correctWorkedShift(again, { ...input, startTime: "11:00", endTime: "14:00" }), again);
+    assert.deepEqual(again.notifications, state.notifications);
+    const forged = authorizeEmployeeStateUpdate(state, again, employee.id);
+    assert.deepEqual(forged.shifts, state.shifts);
+    assert.deepEqual(forged.scheduleHistory, state.scheduleHistory);
+  }
+});
+
+test("time corrections validate ranges and preserve manual cover without requiring reassignment", () => {
+  const { state, input } = fixture();
+  for (const [startTime, endTime] of [["", "14:00"], ["25:00", "26:00"], ["14:00", "14:00"], ["15:00", "14:00"], ["9:00", "14:00"]]) {
+    assert.throws(() => correctWorkedShift(state, { ...input, startTime, endTime }), /valid shift times/);
+  }
+  state.shifts[0] = { ...state.shifts[0], employeeId: undefined, externalAssigneeName: "Manual cover", originalStartTime: undefined, originalEndTime: undefined };
+  const result = correctWorkedShift(state, { ...input, employeeId: "", startTime: "10:00", endTime: "14:00" });
+  assert.equal(result.shifts[0].externalAssigneeName, "Manual cover");
+  assert.equal(result.shifts[0].employeeId, undefined);
+  assert.equal(result.shifts[0].originalStartTime, state.shifts[0].startTime);
+  assert.equal(result.shifts[0].originalEndTime, state.shifts[0].endTime);
+});

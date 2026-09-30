@@ -46,6 +46,7 @@ export type SchedulePeriod = {
   availabilityDeadlineAt: string;
   status: ScheduleStatus;
   publishedAt?: string;
+  mallHoursOverrides?: Record<string, { openTime: string; closeTime: string }>;
 };
 
 export type Unavailability = {

@@ -324,3 +324,6 @@ Passing automated checks alone means the code is internally consistent. It does 
 - While drafting October, correct who worked a September shift from Published schedules. Verify the calendar, selected September hours report, and CSV; original published hours and October draft must stay unchanged. Verify the audit reason and absence of correction emails. Employees cannot make this correction.
 
 Automated regression tests cover period-specific selection, the publication API, repeated coverage and duplicate prevention, historical/current corrections, original hours, permission boundaries, and unchanged unrelated workspace data.
+
+- Correct only the start/end times of a completed shift; verify final report/CSV hours change while original hours remain. Repeat with an employee change and with a historical period. Invalid/reversed times must not save.
+- Select the gray mall hours on one published date, save holiday hours, and verify another day is unchanged. Reload, check employee desktop/mobile calendars and image/PDF export, then restore regular hours. Employees must not see editing controls.
