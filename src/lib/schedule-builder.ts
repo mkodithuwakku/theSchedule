@@ -5,6 +5,7 @@ export type ScheduleBlockingIssueCode =
   | "unfilled_shift"
   | "duplicate_employee_day"
   | "availability_conflict"
+  | "inactive_employee"
   | "invalid_time_range";
 
 export type ScheduleBlockingIssue = {
@@ -115,6 +116,14 @@ export function getScheduleBlockingIssues(
     }
 
     if (!shift.employeeId) return;
+
+    if (people.some((person) => person.id === shift.employeeId && !person.active)) {
+      issues.push({
+        code: "inactive_employee",
+        shiftId: shift.id,
+        message: `${personNameById.get(shift.employeeId)} is no longer active. Assign this shift to an active employee.`
+      });
+    }
 
     if (isEmployeeUnavailable(shift.employeeId, shift, availability)) {
       const name = personNameById.get(shift.employeeId) ?? "An employee";

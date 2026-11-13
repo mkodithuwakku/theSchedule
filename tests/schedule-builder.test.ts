@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { AvailabilitySubmission, Employee, Shift } from "../src/lib/demo-data";
+import { buildHoursCsv, calculateHours, type AvailabilitySubmission, type Employee, type Shift } from "../src/lib/demo-data";
 import {
   autoAssignDraftShifts,
   getScheduleBlockingIssues,
@@ -12,6 +12,21 @@ const people: Employee[] = [
   { id: "employee-a", name: "Alex", email: "alex@example.com", role: "employee", active: true },
   { id: "employee-b", name: "Blair", email: "blair@example.com", role: "employee", active: true }
 ];
+
+test("inactive employees cannot receive new assignments or pass publication checks, but retain historical hours", () => {
+  const roster = [{ ...people[0], active: false }, people[1]];
+  const slot = shift("opening", "2026-11-16", "09:00", "13:00");
+  assert.equal(autoAssignDraftShifts([slot], roster, [])[0].employeeId, people[1].id);
+  assert(getScheduleBlockingIssues([{ ...slot, employeeId: people[0].id }], [], roster)
+    .some((issue) => issue.code === "inactive_employee"));
+  assert(!calculateHours(roster, [slot]).some((row) => row.employeeId === people[0].id));
+
+  const historical = [{ ...slot, employeeId: people[1].id, originalEmployeeId: people[0].id }];
+  assert.equal(calculateHours(roster, historical, true).find((row) => row.employeeId === people[0].id)?.hours, 4);
+  assert(buildHoursCsv(roster, historical).includes('"Alex","4.00","0.00","0"'));
+  historical[0].employeeId = people[0].id;
+  assert.equal(calculateHours(roster, historical).find((row) => row.employeeId === people[0].id)?.hours, 4);
+});
 
 function shift(id: string, date: string, startTime: string, endTime: string): Shift {
   return {

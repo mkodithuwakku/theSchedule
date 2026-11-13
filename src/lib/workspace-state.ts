@@ -108,7 +108,9 @@ export function filterEmployeeWorkspace(state: StoredTestState, employeeId: stri
   const visibleShift = (shift: StoredTestState["shifts"][number]) => ({
     id: shift.id, schedulePeriodId: shift.schedulePeriodId, date: shift.date,
     startTime: shift.startTime, endTime: shift.endTime, employeeId: shift.employeeId,
-    externalAssigneeName: shift.externalAssigneeName
+    // Former employees stay off the roster, but their published shifts retain a name.
+    externalAssigneeName: shift.externalAssigneeName ||
+      state.people.find((person) => person.id === shift.employeeId && !person.active)?.name
   });
   return {
     workspaceVersion: state.workspaceVersion,

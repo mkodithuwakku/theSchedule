@@ -63,3 +63,26 @@ test("unpublished shifts never reach employee browsers, including an empty blank
   state.shifts = [];
   assert.deepEqual(filterEmployeeWorkspace(state, state.people[1].id).shifts, []);
 });
+
+test("former employees remain named on published shifts without returning to the employee roster", () => {
+  const state = createDefaultTestState();
+  const employee = state.people[1];
+  const former = state.people[2];
+  former.active = false;
+  state.shifts[0].employeeId = former.id;
+  state.scheduleHistory = [{
+    id: "history", archivedAt: "now", period: { ...state.period, status: "published" },
+    shifts: structuredClone(state.shifts)
+  }];
+  const before = structuredClone(state);
+  const response = filterEmployeeWorkspace(state, employee.id);
+  assert(!response.people.some((person) => person.id === former.id));
+  assert.deepEqual(response.shifts, [], "draft assignments remain private");
+  assert.equal(response.scheduleHistory[0].shifts[0].externalAssigneeName, former.name);
+  assert.equal(response.scheduleHistory[0].shifts[0].employeeId, former.id);
+  assert(!JSON.stringify(response).includes(former.email));
+  assert.deepEqual(state, before);
+
+  state.period.status = "published";
+  assert.equal(filterEmployeeWorkspace(state, employee.id).shifts[0].externalAssigneeName, former.name);
+});

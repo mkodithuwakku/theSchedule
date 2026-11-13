@@ -434,7 +434,9 @@ export function generateDefaultShifts(period: SchedulePeriod) {
 }
 
 export function calculateHours(people: Employee[], shifts: Shift[], useOriginal = false) {
-  const activePeople = people.filter((person) => person.active || shifts.some((shift) => shift.employeeId === person.id));
+  const activePeople = people.filter((person) => person.active || shifts.some((shift) =>
+    shift.employeeId === person.id || shift.originalEmployeeId === person.id
+  ));
   const totals = activePeople.map((person) => {
     const assigned = shifts.filter((shift) => {
       const employeeId = useOriginal ? shift.originalEmployeeId : shift.employeeId;

@@ -40,4 +40,13 @@ test("publication API rejects an October conflict even when September availabili
   assert(body.issues.some((issue: { code: string }) => issue.code === "availability_conflict"));
   assert.equal(writes, 0);
   assert.equal(emails, 0);
+
+  state.availability = [];
+  person.active = false;
+  const inactiveResponse = await POST(new Request("http://localhost/api/schedule/publish", { method: "POST", body: JSON.stringify({ uatRunId: state.uatRunId, workspaceVersion: 10, period: state.period, shifts: state.shifts }) }));
+  assert.equal(inactiveResponse.status, 400);
+  const inactiveBody = await inactiveResponse.json();
+  assert(inactiveBody.issues.some((issue: { code: string }) => issue.code === "inactive_employee"));
+  assert.equal(writes, 0);
+  assert.equal(emails, 0);
 });

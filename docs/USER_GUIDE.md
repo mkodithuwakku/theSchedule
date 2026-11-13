@@ -71,6 +71,8 @@ Do this before employees submit availability. Changing period dates during an ac
 
 The employee's signed-in Google email is their identity. Avoid changing it unless the person will actually use the replacement address.
 
+Deactivated employees are hidden from the employee directory, availability roster, assignment choices, and their account activity/email entries. They cannot be auto-assigned or included in a newly published schedule. Their names and worked hours remain in previous schedules, reports, and exports, including the employee team calendar. When correcting a completed shift, a former employee is available only if they were already its original or actual assignee. Deactivation currently requires an administrative update to the user, store membership, and workspace profile; there is no deactivation button.
+
 ### Invite a new employee
 
 1. Select `Employees`.

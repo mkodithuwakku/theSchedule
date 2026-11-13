@@ -705,6 +705,9 @@ export function TheScheduleApp({
     active: true
   };
   const activeEmployees = people.filter((employee) => employee.active);
+  const inactiveEmployeeIds = new Set(people.filter((employee) => !employee.active).map((employee) => employee.id));
+  const visibleNotifications = notifications.filter((entry) => !entry.userId || !inactiveEmployeeIds.has(entry.userId));
+  const visibleAuditLog = auditLog.filter((entry) => !inactiveEmployeeIds.has(entry.actorId) && !inactiveEmployeeIds.has(entry.entityId));
   const activeMemberEmailSet = new Set(activeMemberEmails.map((email) => email.toLowerCase()));
   const dates = useMemo(() => getDatesInPeriod(period), [period]);
   const shiftsByDate = useMemo(
@@ -727,6 +730,7 @@ export function TheScheduleApp({
   const hasInviteSent = (employeeId: string) =>
     notifications.some((entry) => entry.type === "employee_invited" && entry.userId === employeeId);
   const inviteStatusFor = (employee: Employee) => {
+    if (!employee.active) return "inactive" as const;
     // Employee responses contain only active members; their emails stay private.
     if (!isManager && employee.id !== activeEmployee.id && employee.active) return "active" as const;
     if (activeMemberEmailSet.has(employee.email.toLowerCase()) || hasAcceptedInvite(employee.id)) return "active" as const;
@@ -2807,7 +2811,9 @@ export function TheScheduleApp({
             <Field label="Employee who worked">
               <select className={inputBase} value={workedCorrection.employeeId} onChange={(event) => setWorkedCorrection({ ...workedCorrection, employeeId: event.target.value })}>
                 <option value="">Keep current assignment</option>
-                {people.map((person) => <option key={person.id} value={person.id}>{person.name}{person.active ? "" : " (inactive)"}</option>)}
+                {people.filter((person) => person.active || viewedPublishedWindow.shifts.some((shift) =>
+                  shift.id === workedCorrection.shiftId && (shift.employeeId === person.id || shift.originalEmployeeId === person.id)
+                )).map((person) => <option key={person.id} value={person.id}>{person.name}{person.active ? "" : " (inactive)"}</option>)}
               </select>
             </Field>
             <Field label="Actual start time">
@@ -3202,7 +3208,7 @@ export function TheScheduleApp({
                     </p>
                   </div>
                 )}
-                {notifications.slice(0, 3).map((entry) => (
+                {visibleNotifications.slice(0, 3).map((entry) => (
                   <div key={entry.id} className="rounded-lg border border-line bg-paper p-3">
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-sm font-bold">{entry.subject}</span>
@@ -3214,7 +3220,7 @@ export function TheScheduleApp({
                     </p>
                   </div>
                 ))}
-                {auditLog.slice(0, 6).map((entry) => (
+                {visibleAuditLog.slice(0, 6).map((entry) => (
                   <div key={entry.id} className="rounded-lg border border-line p-3">
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-sm font-bold">{entry.action.replaceAll("_", " ")}</span>
@@ -3272,7 +3278,7 @@ export function TheScheduleApp({
                   </tr>
                 </thead>
                 <tbody>
-                  {people.map((employee) => {
+                  {activeEmployees.map((employee) => {
                     const parts = employeeNameParts(employee.name);
                     const status = inviteStatusFor(employee);
                     const isEditing = editingEmployeeId === employee.id;
@@ -4603,10 +4609,10 @@ export function TheScheduleApp({
             </Section>
             <Section title="Email Log" icon={<ShieldCheck size={18} />}>
               <div className="grid gap-3">
-                {notifications.length === 0 && (
+                {visibleNotifications.length === 0 && (
                   <div className="rounded-lg border border-dashed border-line p-6 text-sm font-semibold text-ink/55">No email activity yet.</div>
                 )}
-                {notifications.map((entry) => (
+                {visibleNotifications.map((entry) => (
                   <div key={entry.id} className="rounded-lg border border-line p-4">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0">

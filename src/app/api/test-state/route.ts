@@ -31,7 +31,10 @@ async function responseState(state: StoredTestState, access: AppAccess) {
   });
   const activeEmails = new Set(memberships.map((membership) => normalizeEmail(membership.user.email ?? "")));
   return filterEmployeeWorkspace({ ...state,
-    people: state.people.filter((person) => activeEmails.has(normalizeEmail(person.email)))
+    people: state.people.map((person) => ({
+      ...person,
+      active: person.active && activeEmails.has(normalizeEmail(person.email))
+    }))
   }, employee.id);
 }
 

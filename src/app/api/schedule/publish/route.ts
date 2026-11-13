@@ -43,7 +43,7 @@ export async function POST(request: Request) {
   if (blockingIssues.length > 0) {
     return NextResponse.json(
       {
-        error: `The schedule has ${blockingIssues.length} blocking error${blockingIssues.length === 1 ? "" : "s"}. Resolve every unfilled, duplicate, unavailable, or invalid shift before publishing.`,
+        error: `The schedule has ${blockingIssues.length} blocking error${blockingIssues.length === 1 ? "" : "s"}. Resolve every unfilled, duplicate, unavailable, inactive-employee, or invalid shift before publishing.`,
         issues: blockingIssues
       },
       { status: 400 }
