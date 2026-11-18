@@ -47,6 +47,16 @@ Employee responses are allowlisted before serialization: own availability, draft
 
 Employee writes are reconstructed on the server. An employee may change only their own availability, personal preference, valid coverage/swap actions, their own issue reports, and associated audit/notification additions. Manager-controlled schedule fields from an employee payload are discarded.
 
+### Efficient refresh and on-demand history
+
+The browser requests a compact workspace view. Each refresh authenticates and queries only the revision, run ID, own workspace membership and effective date first. A matching `X-Workspace-Revision` returns HTTP 204 without downloading the JSON document. The token also varies with access role, employee membership roster and requested history sections. A changed view is projected in PostgreSQL before crossing the network.
+
+Managers check every 30 seconds and employees every 60 seconds. Checks pause while hidden, offline, or after five minutes without interaction; interaction or returning to the tab resumes checking. One scheduler coalesces focus/visibility events and backs off failures. In-flight reads are aborted when local edits begin.
+
+Compact views retain ongoing schedules and pending-request dependencies, recent audit/email activity and operational invitation/current-period email records. Full audit/email logs and older retained schedules load through explicit UI controls. Compact manager saves merge historical arrays by ID with the latest full server state, then apply the same atomic revision guard. Employee writes retain their existing authorization rules. History fetches never autosave, and a concurrent local edit aborts a history read. No schema migration or persisted-data deletion is involved.
+
+Backup freshness remains unchanged. Status/protection checks and backup write results select metadata only, avoiding transfer of the backup JSON when only timestamps, checksums and revision information are used.
+
 ### Normalized relational model
 
 `prisma/schema.prisma` includes normalized models for users, stores, memberships, invitations, periods, availability, unavailable days, shifts, templates, store hours, coverage, swaps, snapshots, notifications, audit logs, the current workspace, and the workspace backup.

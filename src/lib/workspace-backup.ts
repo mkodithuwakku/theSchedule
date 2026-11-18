@@ -50,6 +50,11 @@ function jsonValue(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 }
 
+const backupMetadataSelect = {
+  backedUpAt: true, sourceUpdatedAt: true, sourceVersion: true, sourceRunId: true,
+  reason: true, checksum: true, byteSize: true, restoredAt: true, restoreCount: true
+} as const;
+
 function backupStatus(record: {
   backedUpAt: Date;
   sourceUpdatedAt: Date;
@@ -102,6 +107,7 @@ export async function overwriteWorkspaceBackupWithClient(
   const fingerprint = createWorkspaceBackupFingerprint(normalized);
   const backedUpAt = new Date();
   const backup = await database.storeWorkspaceBackup.upsert({
+    select: backupMetadataSelect,
     where: { storeId },
     update: {
       data: jsonValue(normalized),
@@ -131,7 +137,7 @@ export async function overwriteWorkspaceBackup(storeId: string, reason: Workspac
 }
 
 export async function ensureDailyWorkspaceBackup(storeId: string, now = new Date()) {
-  const existing = await prisma.storeWorkspaceBackup.findUnique({ where: { storeId } });
+  const existing = await prisma.storeWorkspaceBackup.findUnique({ where: { storeId }, select: backupMetadataSelect });
   if (existing && isWorkspaceBackupCurrentForDay(existing.backedUpAt, now)) {
     return backupStatus(existing);
   }
@@ -139,7 +145,7 @@ export async function ensureDailyWorkspaceBackup(storeId: string, now = new Date
 }
 
 export async function protectWorkspaceAfterSave(storeId: string, now = new Date()) {
-  const existing = await prisma.storeWorkspaceBackup.findUnique({ where: { storeId } });
+  const existing = await prisma.storeWorkspaceBackup.findUnique({ where: { storeId }, select: backupMetadataSelect });
   if (shouldPreserveBackupAfterSave(existing, now)) {
     return backupStatus(existing);
   }
@@ -152,7 +158,7 @@ export async function overwriteAllWorkspaceBackups() {
 }
 
 export async function readWorkspaceBackupStatus(storeId: string) {
-  const backup = await prisma.storeWorkspaceBackup.findUnique({ where: { storeId } });
+  const backup = await prisma.storeWorkspaceBackup.findUnique({ where: { storeId }, select: backupMetadataSelect });
   return backupStatus(backup);
 }
 
@@ -198,6 +204,7 @@ export async function restoreWorkspaceBackup(storeId: string) {
       }
     });
     const updatedBackup = await transaction.storeWorkspaceBackup.update({
+      select: backupMetadataSelect,
       where: { storeId },
       data: {
         restoredAt,

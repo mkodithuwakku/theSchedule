@@ -43,11 +43,15 @@ The browser interface is the supported client. This reference is for maintenance
 
 Returns the normalized workspace, database `workspaceVersion`, and headers `X-Test-State-Persisted: true` and `Cache-Control: private, no-store`. Employee GET and PUT responses include only own availability/drafts/preferences, published team shifts without internal notes, relevant coverage/swaps, and own notifications. Coworker emails, draft shifts, audit logs, UAT issues/results, and invite acceptances are excluded.
 
+The browser uses `?view=compact`. Optional `audit=all`, `notifications=all` and `schedules=all` expand the corresponding retained history on demand. The response adds `historyTotals` and `X-Workspace-Revision`. Sending that revision header back with the same view returns **204 with no body** when unchanged; authorization still runs. Changes in run, role, employee membership roster or effective date also invalidate it. Consumers must handle 204 before parsing JSON. Full GETs without `view=compact` retain the legacy contract.
+
+Compact projection is performed in SQL, rather than fetching the full JSON and trimming only the HTTP response. Recent operational records, ongoing schedules, and schedules needed by pending coverage/swaps remain available in the compact view.
+
 ### `PUT /api/test-state`
 
 The request body is the proposed workspace. Its `uatRunId` and integer `workspaceVersion` must match the current database workspace. A missing or stale version or changed run returns `409`. The comparison and version increment are atomic; a successful response includes the new revision.
 
-For a manager, the normalized proposal is persisted. For an employee, the server reconstructs a safe workspace containing only permitted changes to that employee's availability, theme preference, coverage/swap participation, issues, and related log entries.
+For a manager, the normalized proposal is persisted. With `X-Workspace-View: compact`, omitted audit, notification and archived schedule records are preserved by ID before normalization; loaded records can still be edited. The response is full state, and the client invalidates its read token after saving. For an employee, the server reconstructs a safe workspace containing only permitted changes to that employee's availability, theme preference, coverage/swap participation, issues, and related log entries.
 
 ### `DELETE /api/test-state`
 

@@ -27,6 +27,7 @@
     "resend": "^4.1.2"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.16",
     "@eslint/eslintrc": "^3.3.5",
     "@types/node": "^22.10.5",
     "@types/react": "^19.0.2",

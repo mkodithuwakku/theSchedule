@@ -4,7 +4,7 @@ import { createDefaultTestState } from "../src/lib/test-state";
 import {
   hasWorkspaceStateChanged,
   MANAGER_WORKSPACE_REFRESH_MS,
-  WORKSPACE_FOCUS_RETRY_MS,
+  WORKSPACE_IDLE_MS,
   workspaceStateFingerprint,
 } from "../src/lib/workspace-sync";
 
@@ -38,7 +38,7 @@ test("workspace refresh detects a new employee availability submission", () => {
   );
 });
 
-test("manager polling and tab-return retry remain prompt for UAT", () => {
-  assert.ok(MANAGER_WORKSPACE_REFRESH_MS <= 5_000);
-  assert.ok(WORKSPACE_FOCUS_RETRY_MS <= 1_500);
+test("refresh timing balances freshness and idle transfer", () => {
+  assert.equal(MANAGER_WORKSPACE_REFRESH_MS, 30_000);
+  assert.equal(WORKSPACE_IDLE_MS, 300_000);
 });

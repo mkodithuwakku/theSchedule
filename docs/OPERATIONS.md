@@ -414,3 +414,10 @@ Use [Launch verification](./LAUNCH_VERIFICATION.md) for the current release gate
 - [ ] Restore drill and stale-tab guard pass.
 - [ ] Guided normal schedule journey passes.
 - [ ] No unresolved critical UAT issue remains.
+
+
+## Checking network-transfer savings
+
+After deploying the November 18 refresh changes, reload already-open manager and employee tabs so they adopt the new client. In browser network tools, active manager checks should occur approximately every 30 seconds and employee checks every 60 seconds; unchanged compact views return 204. After five minutes without interaction, checks stop until interaction resumes. Hidden/offline tabs also pause. History controls should request expanded views only on demand, and never trigger an unsolicited PUT.
+
+Record Neon's project `data_transfer_bytes` before and after a representative usage period to assess actual savings. Small authorized revision checks still consume some transfer; savings depend on active sessions, edits and history requests. Avoid full production exports solely to measure this change. Backup frequency, checksums, manual/pre-reset protection and restore verification must remain intact. Existing open clients keep the earlier polling rate until reloaded.

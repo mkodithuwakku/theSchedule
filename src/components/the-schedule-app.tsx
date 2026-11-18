@@ -103,10 +103,12 @@ import {
   hasWorkspaceStateChanged,
   MANAGER_WORKSPACE_REFRESH_MS,
   EMPLOYEE_WORKSPACE_REFRESH_MS,
-  WORKSPACE_FOCUS_RETRY_MS,
   WORKSPACE_SAVE_DEBOUNCE_MS,
   workspaceStateFingerprint
 } from "@/lib/workspace-sync";
+
+import { createWorkspacePoller } from "@/lib/workspace-polling";
+import { DEFAULT_WORKSPACE_VIEW, workspaceViewUrl, type WorkspaceView, type WorkspaceViewState } from "@/lib/workspace-view";
 
 type TabId =
   | "dashboard"
@@ -683,6 +685,11 @@ export function TheScheduleApp({
     category: "ui" as UatIssueCategory,
     note: ""
   });
+  const viewRef = useRef<WorkspaceView>({ ...DEFAULT_WORKSPACE_VIEW });
+  const revisionTokenRef = useRef("");
+  const [historyTotals, setHistoryTotals] = useState({ audit: 0, notifications: 0, schedules: 0 });
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<{ kind: keyof WorkspaceView; message: string } | null>(null);
   const lastSyncedStateRef = useRef<string | null>(null);
   const refreshRequestRef = useRef<AbortController | null>(null);
   const workspaceVersionRef = useRef<number | undefined>(undefined);
@@ -932,7 +939,12 @@ export function TheScheduleApp({
     setSwapForm({ requesterShiftId: "", targetShiftId: "", reason: "" });
   }, [activeEmployee.id]);
 
-  const applyStoredState = useCallback((stored: Partial<StoredTestState>) => {
+  const applyStoredState = useCallback((stored: Partial<WorkspaceViewState>) => {
+    setHistoryTotals(stored.historyTotals ?? {
+      audit: stored.auditLog?.length ?? 0,
+      notifications: stored.notifications?.length ?? 0,
+      schedules: stored.scheduleHistory?.length ?? 0
+    });
     workspaceVersionRef.current = stored.workspaceVersion;
     if (stored.uatRunId) setUatRunId(stored.uatRunId);
     if (stored.people) {
@@ -983,10 +995,11 @@ export function TheScheduleApp({
 
     async function loadSavedState() {
       try {
-        const response = await fetch("/api/test-state", { cache: "no-store" });
+        const response = await fetch(workspaceViewUrl(viewRef.current), { cache: "no-store" });
         if (!response.ok) throw new Error("Unable to load server test state.");
-        const stored = (await response.json()) as StoredTestState;
+        const stored = (await response.json()) as WorkspaceViewState;
         if (cancelled) return;
+        revisionTokenRef.current = response.headers.get("X-Workspace-Revision") ?? "";
 
         skipNextPersistenceRef.current = true;
         applyStoredState(stored);
@@ -1013,53 +1026,60 @@ export function TheScheduleApp({
   useEffect(() => {
     if (!hasLoadedStoredState) return;
     let cancelled = false;
-    let retryTimer: number | undefined;
 
     async function refreshSavedState() {
-      if (cancelled || document.visibilityState === "hidden" || refreshRequestRef.current || savePendingRef.current || saveBlockedRef.current || serverActionRef.current) return;
-
+      if (cancelled || refreshRequestRef.current || savePendingRef.current || saveBlockedRef.current || serverActionRef.current) return true;
       const controller = new AbortController();
       refreshRequestRef.current = controller;
       try {
-        const response = await fetch("/api/test-state", { cache: "no-store", signal: controller.signal });
+        const response = await fetch(workspaceViewUrl(viewRef.current), {
+          cache: "no-store", signal: controller.signal,
+          headers: { "X-Workspace-Revision": revisionTokenRef.current }
+        });
         if (!response.ok) throw new Error("Unable to refresh server test state.");
-        const stored = (await response.json()) as StoredTestState;
-        if (cancelled || controller.signal.aborted || savePendingRef.current || saveBlockedRef.current || serverActionRef.current) return;
-
+        if (response.status === 204) {
+          if (!cancelled && !controller.signal.aborted && !savePendingRef.current && !saveBlockedRef.current && !serverActionRef.current) setPersistenceStatus("saved");
+          return true;
+        }
+        const stored = (await response.json()) as WorkspaceViewState;
+        if (cancelled || controller.signal.aborted || savePendingRef.current || saveBlockedRef.current || serverActionRef.current) return true;
+        revisionTokenRef.current = response.headers.get("X-Workspace-Revision") ?? "";
         if (hasWorkspaceStateChanged(stored, lastSyncedStateRef.current)) {
           skipNextPersistenceRef.current = true;
           applyStoredState(stored);
           lastSyncedStateRef.current = workspaceStateFingerprint(stored);
-
         }
         setPersistenceStatus("saved");
+        return true;
       } catch (error) {
-        if (error instanceof DOMException && error.name === "AbortError") return;
-        setPersistenceStatus("local");
+        if (cancelled || (error instanceof DOMException && error.name === "AbortError")) return true;
+        if (!savePendingRef.current && !saveBlockedRef.current) setPersistenceStatus("local");
+        return false;
       } finally {
         if (refreshRequestRef.current === controller) refreshRequestRef.current = null;
       }
     }
 
-    function refreshAfterTabReturn() {
-      if (document.visibilityState === "hidden") return;
-      void refreshSavedState();
-      if (retryTimer) window.clearTimeout(retryTimer);
-      retryTimer = window.setTimeout(() => void refreshSavedState(), WORKSPACE_FOCUS_RETRY_MS);
-    }
-
-    window.addEventListener("focus", refreshAfterTabReturn);
-    document.addEventListener("visibilitychange", refreshAfterTabReturn);
-    const workspaceRefreshInterval = window.setInterval(
-      () => void refreshSavedState(), isManager ? MANAGER_WORKSPACE_REFRESH_MS : EMPLOYEE_WORKSPACE_REFRESH_MS
-    );
-
+    const poller = createWorkspacePoller({
+      interval: isManager ? MANAGER_WORKSPACE_REFRESH_MS : EMPLOYEE_WORKSPACE_REFRESH_MS,
+      refresh: refreshSavedState,
+      visible: () => document.visibilityState !== "hidden",
+      online: () => navigator.onLine
+    });
+    const activityEvents = ["pointerdown", "pointermove", "keydown", "scroll", "touchstart"] as const;
+    for (const event of activityEvents) window.addEventListener(event, poller.activity, { passive: true });
+    window.addEventListener("focus", poller.resume);
+    window.addEventListener("online", poller.resume);
+    window.addEventListener("offline", poller.resume);
+    document.addEventListener("visibilitychange", poller.resume);
     return () => {
       cancelled = true;
-      window.removeEventListener("focus", refreshAfterTabReturn);
-      document.removeEventListener("visibilitychange", refreshAfterTabReturn);
-      if (retryTimer) window.clearTimeout(retryTimer);
-      window.clearInterval(workspaceRefreshInterval);
+      poller.stop();
+      for (const event of activityEvents) window.removeEventListener(event, poller.activity);
+      window.removeEventListener("focus", poller.resume);
+      window.removeEventListener("online", poller.resume);
+      window.removeEventListener("offline", poller.resume);
+      document.removeEventListener("visibilitychange", poller.resume);
       refreshRequestRef.current?.abort();
       refreshRequestRef.current = null;
     };
@@ -1105,11 +1125,12 @@ export function TheScheduleApp({
         try {
           const response = await fetch("/api/test-state", {
             method: "PUT",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", "X-Workspace-View": "compact" },
             body: JSON.stringify({ ...snapshot, workspaceVersion: workspaceVersionRef.current })
           });
           const result = await response.json() as StoredTestState & { error?: string };
           if (!response.ok) throw new Error(result.error ?? "The save could not be confirmed. Reload before editing again.");
+          revisionTokenRef.current = "";
           workspaceVersionRef.current = result.workspaceVersion;
           lastSyncedStateRef.current = workspaceStateFingerprint(result);
 
@@ -1146,12 +1167,46 @@ export function TheScheduleApp({
   }
 
   function acceptServerState(state: StoredTestState) {
+    revisionTokenRef.current = "";
     skipNextPersistenceRef.current = true;
     applyStoredState(state);
     lastSyncedStateRef.current = workspaceStateFingerprint(state);
     unsavedSnapshotRef.current = null;
 
     setPersistenceStatus("saved");
+  }
+
+  async function loadHistory(kind: keyof WorkspaceView) {
+    if (savePendingRef.current || saveBlockedRef.current || serverActionRef.current) {
+      setHistoryError({ kind, message: "Wait for Saved before loading history. If saving is paused, reload the schedule first." });
+      return;
+    }
+    setHistoryError(null);
+    setHistoryLoading(true);
+    // Edits and server actions abort this read just like a background refresh.
+    const sequence = saveSequenceRef.current;
+    const nextView = { ...viewRef.current, [kind]: true };
+    refreshRequestRef.current?.abort();
+    const controller = new AbortController();
+    refreshRequestRef.current = controller;
+    try {
+      const response = await fetch(workspaceViewUrl(nextView), { cache: "no-store", signal: controller.signal });
+      if (!response.ok) throw new Error("History could not be loaded. Please try again.");
+      const state = await response.json() as WorkspaceViewState;
+      if (controller.signal.aborted || saveSequenceRef.current !== sequence || unsavedSnapshotRef.current) {
+        throw new Error("Your edits were kept. Save them before loading history again.");
+      }
+      viewRef.current = nextView;
+      acceptServerState(state);
+      revisionTokenRef.current = response.headers.get("X-Workspace-Revision") ?? "";
+    } catch (error) {
+      setHistoryError({ kind, message: error instanceof DOMException && error.name === "AbortError"
+        ? "History loading paused to keep your changes. Try again after Saved."
+        : error instanceof Error ? error.message : "History could not be loaded." });
+    } finally {
+      if (refreshRequestRef.current === controller) refreshRequestRef.current = null;
+      setHistoryLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -2784,6 +2839,18 @@ export function TheScheduleApp({
     { id: "requests", label: "Coverage", icon: <Repeat2 size={16} /> }
   ];
 
+  const historyControls = (kind: keyof WorkspaceView, loaded: number, label: string) => (
+    <div className="my-3" aria-live="polite">
+      {historyTotals[kind] > loaded && (
+        <Button variant="secondary" disabled={historyLoading || serverActionPending || persistenceStatus !== "saved"} onClick={() => void loadHistory(kind)}>
+          {historyLoading ? "Loading history…" : label}
+        </Button>
+      )}
+      {historyError?.kind === kind && <p role="alert" className="mt-2 text-sm text-warn">{historyError.message}</p>}
+    </div>
+  );
+  const olderScheduleControl = historyControls("schedules", scheduleHistory.length, "Load older schedules");
+
   const publishedCalendar = viewedPublishedWindow ? (
     <Section title="Published schedules" icon={<CalendarDays size={18} />}>
       <Field label="Schedule period">
@@ -3189,6 +3256,7 @@ export function TheScheduleApp({
               availability={availability}
               showAssignments
             />
+            {olderScheduleControl}
             {publishedCalendar}
             <Section title="Schedule windows" icon={<CalendarDays size={18} />}>
               <p className="text-sm leading-6">{period.status === "published"
@@ -3196,6 +3264,7 @@ export function TheScheduleApp({
                 : `Preparing ${period.name}. Availability opens ${period.availabilityOpenAt}, reminders start ${availabilityReminderDate(period.releaseDate)}, submissions close ${period.availabilityDeadlineAt}, and publication is due ${period.releaseDate}. Published schedules remain available above.`}</p>
             </Section>
             <Section title="Activity" icon={<ShieldCheck size={18} />}>
+              {historyControls("audit", auditLog.length, "Load full activity history")}
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 {missingAvailability.length > 0 && (
                   <div className="rounded-lg border border-warn bg-warn/10 p-3">
@@ -3220,7 +3289,7 @@ export function TheScheduleApp({
                     </p>
                   </div>
                 ))}
-                {visibleAuditLog.slice(0, 6).map((entry) => (
+                {visibleAuditLog.map((entry) => (
                   <div key={entry.id} className="rounded-lg border border-line p-3">
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-sm font-bold">{entry.action.replaceAll("_", " ")}</span>
@@ -3766,6 +3835,7 @@ export function TheScheduleApp({
 
         {activeTab === "team" && mode === "employee" && (
           <>
+            {olderScheduleControl}
             {publishedCalendar}
           </>
         )}
@@ -4237,12 +4307,13 @@ export function TheScheduleApp({
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <h3 className="font-black">Published schedule history</h3>
+                      {olderScheduleControl}
                       <p className="mt-1 text-sm text-ink/60">Bounded to the six most recent cycles.</p>
                     </div>
-                    <Badge>{scheduleHistory.length}/6 saved</Badge>
+                    <Badge>{historyTotals.schedules}/6 saved</Badge>
                   </div>
                   <div className="mt-3 grid gap-2">
-                    {scheduleHistory.length === 0 && (
+                    {historyTotals.schedules === 0 && (
                       <div className="rounded-md border border-dashed border-line p-4 text-sm font-semibold text-ink/50">
                         The first published schedule appears here when you start the next cycle.
                       </div>
@@ -4482,6 +4553,7 @@ export function TheScheduleApp({
               </div>
             }
           >
+            {olderScheduleControl}
             <Field label="Report schedule period">
               <select className={inputBase} value={reportWindow.period.id} onChange={(event) => setSelectedReportPeriodId(event.target.value)}>
                 {reportWindows.map((window) => <option key={window.period.id} value={window.period.id}>{window.period.name}</option>)}
@@ -4608,6 +4680,7 @@ export function TheScheduleApp({
               </div>
             </Section>
             <Section title="Email Log" icon={<ShieldCheck size={18} />}>
+              {historyControls("notifications", notifications.length, "Load full email history")}
               <div className="grid gap-3">
                 {visibleNotifications.length === 0 && (
                   <div className="rounded-lg border border-dashed border-line p-6 text-sm font-semibold text-ink/55">No email activity yet.</div>

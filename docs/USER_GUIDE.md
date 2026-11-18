@@ -16,6 +16,12 @@ Phones show a compact sign-in screen with the same Google authentication. The or
 
 Approved users receive a rolling ten-year browser session. They normally remain signed in on the same browser unless they sign out, clear browser data, a manager deactivates their access, or a clean UAT reset removes active sessions.
 
+## Updates and older records
+
+Your saves are immediate. Changes made by someone else normally appear within approximately 30 seconds for managers or 60 seconds for employees while actively using the app. Returning to the tab triggers a check. Automatic checks pause when the tab is hidden, offline, or unused for five minutes, and resume when you interact again; this does not sign you out or discard edits.
+
+Use **Load older schedules** above published schedules or in Reports to access earlier retained periods. Select the desired period after loading, then view or export its report as usual. On the manager Dashboard, **Load full activity history** expands older audit entries. In Notifications, **Load full email history** expands previous email records. Wait for **Saved** before loading history. Loading records does not change or save them.
+
 ## Manager navigation
 
 Managers have these primary areas:
